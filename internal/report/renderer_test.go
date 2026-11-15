@@ -119,6 +119,77 @@ func TestDefaultReportFont(t *testing.T) {
 	}
 }
 
+func TestDeclaredParamDefaults(t *testing.T) {
+	t.Parallel()
+	content := `---
+title: "Report"
+params:
+  title: "默认标题"
+  top_n: 8
+format: html
+---
+`
+	got := DeclaredParamDefaults(content)
+	if got["title"] != "默认标题" || got["top_n"] != "8" {
+		t.Fatalf("DeclaredParamDefaults() = %#v", got)
+	}
+}
+
+func TestApplyReportParamDefaults(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		content  string
+		saveName string
+		params   map[string]string
+		key      string
+		want     string
+	}{
+		{
+			name:    "legacy top n",
+			content: "TOP_N={{top_n}}",
+			params:  map[string]string{},
+			key:     "top_n",
+			want:    "8",
+		},
+		{
+			name: "declared top n",
+			content: `---
+params:
+  top_n: 3
+---
+{{top_n}}`,
+			params: map[string]string{},
+			key:    "top_n",
+			want:   "3",
+		},
+		{
+			name:    "runtime top n wins",
+			content: "TOP_N={{top_n}}",
+			params:  map[string]string{"top_n": "12"},
+			key:     "top_n",
+			want:    "12",
+		},
+		{
+			name:     "save name becomes title",
+			content:  "# {{title}}",
+			saveName: "月度销售分析",
+			params:   map[string]string{},
+			key:      "title",
+			want:     "月度销售分析",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			applyReportParamDefaults(test.content, test.saveName, test.params)
+			if got := test.params[test.key]; got != test.want {
+				t.Errorf("params[%q] = %q, want %q", test.key, got, test.want)
+			}
+		})
+	}
+}
+
 func TestEnvironmentTreatsQuartoAsPDFCapable(t *testing.T) {
 	t.Parallel()
 	environment := NewRenderer("/missing/quarto", nil, nil).Environments(context.Background())

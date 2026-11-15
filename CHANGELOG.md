@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.2 - 2026-11-15
+
+### Fixed
+
+- Resolve QMD `params` defaults when rendering reports outside a workflow.
+- Keep `top_n=8` as a compatibility default for earlier monthly report templates.
+- Discover Jupyter and Python installed through Python.org Framework, pyenv, Conda, and Windows user installs.
+- Force UTF-8 locale for GUI-launched R sessions so Chinese DuckDB strings render correctly.
+
 ## v0.1.1 - 2026-11-15
 
 ### Fixed

@@ -82,6 +82,7 @@ func (r *Renderer) Render(ctx context.Context, request model.RenderRequest) (mod
 	for key, value := range request.Params {
 		params[key] = value
 	}
+	applyReportParamDefaults(request.Content, request.SaveAs, params)
 	params["database"] = r.store.Database
 	if strings.TrimSpace(params["report_font"]) == "" {
 		params["report_font"] = defaultReportFont(runtime.GOOS)
@@ -225,6 +226,44 @@ func defaultReportFont(goos string) string {
 	default:
 		return "Noto Sans CJK SC"
 	}
+}
+
+func applyReportParamDefaults(content, saveName string, params map[string]string) {
+	for key, value := range DeclaredParamDefaults(content) {
+		if _, exists := params[key]; !exists {
+			params[key] = value
+		}
+	}
+	if _, exists := params["top_n"]; !exists {
+		for _, key := range declaredVariables(content) {
+			if key == "top_n" {
+				params[key] = "8"
+				break
+			}
+		}
+	}
+	if strings.TrimSpace(params["title"]) == "" {
+		if title := strings.TrimSpace(saveName); title != "" {
+			params["title"] = title
+		}
+	}
+}
+
+func declaredVariables(content string) []string {
+	matches := templateVariable.FindAllStringSubmatch(content, -1)
+	seen := make(map[string]struct{}, len(matches))
+	result := make([]string, 0, len(matches))
+	for _, match := range matches {
+		if len(match) != 2 {
+			continue
+		}
+		if _, exists := seen[match[1]]; exists {
+			continue
+		}
+		seen[match[1]] = struct{}{}
+		result = append(result, match[1])
+	}
+	return result
 }
 
 func HTMLTable(result model.QueryResult) string {
@@ -444,6 +483,63 @@ func DeclaredParams(content string) []string {
 		result = append(result, key)
 	}
 	sort.Strings(result)
+	return result
+}
+
+func DeclaredParamDefaults(content string) map[string]string {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	if len(lines) < 3 || strings.TrimSpace(lines[0]) != "---" {
+		return nil
+	}
+	frontMatterEnd := -1
+	for index := 1; index < len(lines); index++ {
+		if strings.TrimSpace(lines[index]) == "---" {
+			frontMatterEnd = index
+			break
+		}
+	}
+	if frontMatterEnd < 0 {
+		return nil
+	}
+
+	paramsIndent := -1
+	result := make(map[string]string)
+	for index := 1; index < frontMatterEnd; index++ {
+		line := lines[index]
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+		if paramsIndent < 0 {
+			if trimmed == "params:" {
+				paramsIndent = indent
+			}
+			continue
+		}
+		if indent <= paramsIndent {
+			break
+		}
+		if indent != paramsIndent+2 {
+			continue
+		}
+		key, value, ok := strings.Cut(trimmed, ":")
+		key = strings.TrimSpace(key)
+		if !ok || key == "" {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		if len(value) >= 2 {
+			if (value[0] == '"' && value[len(value)-1] == '"') ||
+				(value[0] == '\'' && value[len(value)-1] == '\'') {
+				value = value[1 : len(value)-1]
+			}
+		}
+		if value == "null" || value == "~" {
+			value = ""
+		}
+		result[key] = value
+	}
 	return result
 }
 

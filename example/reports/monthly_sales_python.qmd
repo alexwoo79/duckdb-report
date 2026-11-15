@@ -23,6 +23,9 @@ execute:
   echo: false
   warning: false
   message: false
+params:
+  title: "月度销售分析（Python）"
+  top_n: 8
 ---
 
 ```{python}

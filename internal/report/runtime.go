@@ -12,8 +12,9 @@ import (
 )
 
 var (
-	rCodeChunk      = regexp.MustCompile("(?m)^```\\s*\\{\\s*r(?:\\s|[,}])")
-	pythonCodeChunk = regexp.MustCompile("(?m)^```\\s*\\{\\s*python(?:\\s|[,}])")
+	rCodeChunk       = regexp.MustCompile("(?m)^```\\s*\\{\\s*r(?:\\s|[,}])")
+	pythonCodeChunk  = regexp.MustCompile("(?m)^```\\s*\\{\\s*python(?:\\s|[,}])")
+	templateVariable = regexp.MustCompile(`\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}`)
 )
 
 type ScriptRequirements struct {
@@ -27,11 +28,29 @@ var runtimePathOnce sync.Once
 // do not inherit from the user's interactive shell.
 func EnsureRuntimePath() {
 	runtimePathOnce.Do(func() {
+		ensureUTF8Environment()
 		path := mergePathEntries(os.Getenv("PATH"), runtimePathEntries())
 		if path != "" {
 			_ = os.Setenv("PATH", path)
 		}
 	})
+}
+
+func ensureUTF8Environment() {
+	if runtime.GOOS == "windows" {
+		if strings.TrimSpace(os.Getenv("PYTHONUTF8")) == "" {
+			_ = os.Setenv("PYTHONUTF8", "1")
+		}
+		return
+	}
+	for _, key := range []string{"LC_ALL", "LC_CTYPE", "LANG"} {
+		value := strings.ToLower(strings.TrimSpace(os.Getenv(key)))
+		if strings.Contains(value, "utf-8") || strings.Contains(value, "utf8") {
+			return
+		}
+	}
+	_ = os.Setenv("LANG", "C.UTF-8")
+	_ = os.Setenv("LC_CTYPE", "C.UTF-8")
 }
 
 func runtimePathEntries() []string {
@@ -50,8 +69,14 @@ func runtimePathEntries() []string {
 			"/Applications/quarto/bin",
 			"/Library/Frameworks/R.framework/Resources/bin",
 		)
+		candidates = append(candidates, globDirectories(
+			filepath.Join(home, "Library", "Python", "3.*", "bin"),
+			filepath.Join(home, "Library", "Frameworks", "Python.framework", "Versions", "*", "bin"),
+			"/Library/Frameworks/Python.framework/Versions/*/bin",
+		)...)
 	case "windows":
 		localAppData := os.Getenv("LOCALAPPDATA")
+		appData := os.Getenv("APPDATA")
 		programFiles := os.Getenv("ProgramFiles")
 		candidates = append(candidates,
 			filepath.Join(localAppData, "Programs", "Quarto", "bin"),
@@ -59,6 +84,7 @@ func runtimePathEntries() []string {
 		candidates = append(candidates, globDirectories(
 			filepath.Join(localAppData, "Programs", "Python", "Python*"),
 			filepath.Join(localAppData, "Programs", "Python", "Python*", "Scripts"),
+			filepath.Join(appData, "Python", "Python*", "Scripts"),
 		)...)
 		candidates = append(candidates, globDirectories(
 			filepath.Join(programFiles, "R", "R-*", "bin", "x64"),
