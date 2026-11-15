@@ -1740,7 +1740,7 @@ onMounted(async () => {
                   </div>
                   <div class="runtime-check">
                     <span class="env-dot" :class="{ ready: state?.environment.pdfAvailable }"></span>
-                    <div><strong>PDF / Typst / LaTeX</strong><small>报告导出能力</small></div>
+                    <div><strong>PDF / Typst</strong><small>Quarto 报告导出能力</small></div>
                     <span class="runtime-check-status">{{ state?.environment.pdfAvailable ? "可用" : "缺失" }}</span>
                   </div>
                 </div>
@@ -1808,7 +1808,7 @@ onMounted(async () => {
           <div class="env-item">
             <span class="env-dot" :class="{ ready: state?.environment.pdfAvailable }"></span>
             <div>
-              <strong>PDF / LaTeX</strong>
+              <strong>PDF / Typst</strong>
               <small>{{ state?.environment.pdfAvailable ? "可用" : "不可用" }}</small>
             </div>
           </div>

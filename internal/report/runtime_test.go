@@ -1,6 +1,10 @@
 package report
 
-import "testing"
+import (
+	"os"
+	"strings"
+	"testing"
+)
 
 func TestDetectRequirements(t *testing.T) {
 	t.Parallel()
@@ -33,5 +37,16 @@ func TestDetectRequirements(t *testing.T) {
 				t.Fatalf("DetectRequirements() = %#v", got)
 			}
 		})
+	}
+}
+
+func TestMergePathEntries(t *testing.T) {
+	t.Parallel()
+	current := strings.Join([]string{"/usr/bin", "/opt/homebrew/bin", "/custom/bin"}, string(os.PathListSeparator))
+	preferred := []string{"/opt/homebrew/bin", "/custom/bin", "/tools/bin", "/tools/bin"}
+	got := mergePathEntries(current, preferred)
+	want := strings.Join([]string{"/opt/homebrew/bin", "/custom/bin", "/tools/bin", "/usr/bin"}, string(os.PathListSeparator))
+	if got != want {
+		t.Fatalf("mergePathEntries() = %q, want %q", got, want)
 	}
 }

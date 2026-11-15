@@ -119,6 +119,14 @@ func TestDefaultReportFont(t *testing.T) {
 	}
 }
 
+func TestEnvironmentTreatsQuartoAsPDFCapable(t *testing.T) {
+	t.Parallel()
+	environment := NewRenderer("/missing/quarto", nil, nil).Environments(context.Background())
+	if !environment.PDFAvailable {
+		t.Fatal("Quarto/Typst should make PDF output available")
+	}
+}
+
 func TestApplyDeclaredParams(t *testing.T) {
 	t.Parallel()
 	content := "---\ntitle: \"Report\"\nparams:\n  database: \"old.duckdb\"\n  title: \"Old\"\nformat: html\n---\n"

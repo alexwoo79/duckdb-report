@@ -14,14 +14,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - os: macos-15-intel
             platform: darwin/universal
             artifact: duckdb-report-macos-universal
           - os: windows-latest
             platform: windows/amd64
             artifact: duckdb-report-windows-amd64
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os == 'macos-14' }}
+    continue-on-error: ${{ matrix.os == 'macos-15-intel' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -80,8 +80,10 @@ jobs:
           path: release-artifacts
           merge-multiple: true
       - name: Create checksums
-        working-directory: release-artifacts
-        run: sha256sum * > checksums.txt
+        run: |
+          mkdir -p release-artifacts
+          cd release-artifacts
+          sha256sum * > checksums.txt
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:

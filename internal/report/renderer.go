@@ -28,11 +28,15 @@ type Renderer struct {
 }
 
 func NewRenderer(quarto string, store *workspace.Store, database *database.Service) *Renderer {
+	EnsureRuntimePath()
+	if strings.TrimSpace(quarto) == "" {
+		quarto, _ = exec.LookPath("quarto")
+	}
 	return &Renderer{quarto: strings.TrimSpace(quarto), store: store, database: database}
 }
 
 func (r *Renderer) Environments(ctx context.Context) model.Environment {
-	result := model.Environment{PDFAvailable: hasExecutable("xelatex") || hasExecutable("pdflatex")}
+	result := model.Environment{}
 	result.RPath, _ = exec.LookPath("Rscript")
 	if result.RPath != "" {
 		result.RVersion = commandVersion(ctx, result.RPath)
@@ -47,6 +51,7 @@ func (r *Renderer) Environments(ctx context.Context) model.Environment {
 		result.QuartoPath = r.quarto
 		result.QuartoVersion = commandVersion(ctx, r.quarto)
 	}
+	result.PDFAvailable = result.QuartoPath != "" || hasExecutable("xelatex") || hasExecutable("pdflatex")
 	if r.database != nil {
 		if version, err := r.database.Version(ctx); err == nil {
 			result.DuckDBVersion = version

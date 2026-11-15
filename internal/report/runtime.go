@@ -2,8 +2,13 @@ package report
 
 import (
 	"errors"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"runtime"
+	"strings"
+	"sync"
 )
 
 var (
@@ -14,6 +19,99 @@ var (
 type ScriptRequirements struct {
 	NeedsR      bool `json:"needsR"`
 	NeedsPython bool `json:"needsPython"`
+}
+
+var runtimePathOnce sync.Once
+
+// EnsureRuntimePath adds common desktop tool locations that GUI-launched apps
+// do not inherit from the user's interactive shell.
+func EnsureRuntimePath() {
+	runtimePathOnce.Do(func() {
+		path := mergePathEntries(os.Getenv("PATH"), runtimePathEntries())
+		if path != "" {
+			_ = os.Setenv("PATH", path)
+		}
+	})
+}
+
+func runtimePathEntries() []string {
+	home, _ := os.UserHomeDir()
+	candidates := []string{
+		"/opt/homebrew/bin",
+		"/usr/local/bin",
+		filepath.Join(home, ".local", "bin"),
+		filepath.Join(home, ".pyenv", "shims"),
+		filepath.Join(home, "miniconda3", "bin"),
+		filepath.Join(home, "anaconda3", "bin"),
+	}
+	switch runtime.GOOS {
+	case "darwin":
+		candidates = append(candidates,
+			"/Applications/quarto/bin",
+			"/Library/Frameworks/R.framework/Resources/bin",
+		)
+	case "windows":
+		localAppData := os.Getenv("LOCALAPPDATA")
+		programFiles := os.Getenv("ProgramFiles")
+		candidates = append(candidates,
+			filepath.Join(localAppData, "Programs", "Quarto", "bin"),
+		)
+		candidates = append(candidates, globDirectories(
+			filepath.Join(localAppData, "Programs", "Python", "Python*"),
+			filepath.Join(localAppData, "Programs", "Python", "Python*", "Scripts"),
+		)...)
+		candidates = append(candidates, globDirectories(
+			filepath.Join(programFiles, "R", "R-*", "bin", "x64"),
+		)...)
+	}
+
+	existing := make([]string, 0, len(candidates))
+	for _, candidate := range candidates {
+		if !filepath.IsAbs(candidate) {
+			continue
+		}
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			existing = append(existing, filepath.Clean(candidate))
+		}
+	}
+	return existing
+}
+
+func globDirectories(patterns ...string) []string {
+	var result []string
+	for _, pattern := range patterns {
+		matches, _ := filepath.Glob(pattern)
+		result = append(result, matches...)
+	}
+	return result
+}
+
+func mergePathEntries(current string, preferred []string) string {
+	entries := make([]string, 0, len(preferred)+4)
+	seen := make(map[string]struct{}, len(preferred)+4)
+	for _, entry := range preferred {
+		entry = filepath.Clean(strings.TrimSpace(entry))
+		if entry == "." || !filepath.IsAbs(entry) {
+			continue
+		}
+		if _, exists := seen[entry]; exists {
+			continue
+		}
+		seen[entry] = struct{}{}
+		entries = append(entries, entry)
+	}
+	for _, entry := range filepath.SplitList(current) {
+		entry = filepath.Clean(strings.TrimSpace(entry))
+		if entry == "" || entry == "." {
+			continue
+		}
+		if _, exists := seen[entry]; exists {
+			continue
+		}
+		seen[entry] = struct{}{}
+		entries = append(entries, entry)
+	}
+	return strings.Join(entries, string(os.PathListSeparator))
 }
 
 func DetectRequirements(content string) ScriptRequirements {

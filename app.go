@@ -44,6 +44,7 @@ type App struct {
 
 func NewApp(exampleFS fs.FS) *App {
 	app := &App{}
+	report.EnsureRuntimePath()
 	configDir, err := os.UserConfigDir()
 	if err != nil {
 		app.initErr = fmt.Errorf("find application data directory: %w", err)
