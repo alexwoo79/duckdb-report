@@ -145,4 +145,13 @@ func TestEnsureExampleDataCreatesAnalysisTables(t *testing.T) {
 			t.Fatalf("missing example table %q in %#v", expected, found)
 		}
 	}
+	if _, err := db.Query(context.Background(), "CREATE OR REPLACE TABLE kpi_summary AS SELECT 1 AS orders", 1); err != nil {
+		t.Fatal(err)
+	}
+	if err := app.ensureExampleData(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query(context.Background(), "SELECT customers FROM kpi_summary LIMIT 1", 1); err != nil {
+		t.Fatalf("stale example marker was not repaired: %v", err)
+	}
 }

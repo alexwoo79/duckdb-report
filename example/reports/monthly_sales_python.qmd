@@ -48,7 +48,14 @@ plt.rcParams["font.sans-serif"] = [
 plt.rcParams["axes.unicode_minus"] = False
 
 con = duckdb.connect(DATABASE_PATH, read_only=True)
-kpis = con.execute("SELECT * FROM kpi_summary").df().iloc[0]
+kpis = con.execute("""
+SELECT
+    count(DISTINCT order_id) AS orders,
+    count(DISTINCT customer_id) AS customers,
+    round(sum(revenue), 2) AS revenue,
+    round(100.0 * sum(gross_profit) / nullif(sum(revenue), 0), 2) AS margin_pct
+FROM order_detail
+""").df().iloc[0]
 trend = con.execute("SELECT * FROM monthly_trend ORDER BY month").df()
 pivot = con.execute("SELECT * FROM region_category_pivot ORDER BY total_revenue DESC").df()
 products = con.execute(

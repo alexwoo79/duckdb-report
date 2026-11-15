@@ -44,7 +44,14 @@ top_n <- as.integer("{{top_n}}")
 drv <- duckdb()
 con <- dbConnect(drv, dbdir = database_path, read_only = TRUE)
 
-kpis <- dbGetQuery(con, "SELECT * FROM kpi_summary")
+kpis <- dbGetQuery(con, "
+  SELECT
+    count(DISTINCT order_id) AS orders,
+    count(DISTINCT customer_id) AS customers,
+    round(sum(revenue), 2) AS revenue,
+    round(100.0 * sum(gross_profit) / nullif(sum(revenue), 0), 2) AS margin_pct
+  FROM order_detail
+")
 trend <- dbGetQuery(con, "SELECT * FROM monthly_trend ORDER BY month")
 pivot <- dbGetQuery(con, "SELECT * FROM region_category_pivot ORDER BY total_revenue DESC")
 products <- dbGetQuery(

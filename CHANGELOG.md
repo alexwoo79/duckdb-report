@@ -8,6 +8,7 @@
 - Keep `top_n=8` as a compatibility default for earlier monthly report templates.
 - Discover Jupyter and Python installed through Python.org Framework, pyenv, Conda, and Windows user installs.
 - Force UTF-8 locale for GUI-launched R sessions so Chinese DuckDB strings render correctly.
+- Prevent the starter workflow from overwriting the monthly example KPI table schema.
 
 ## v0.1.1 - 2026-11-15
 

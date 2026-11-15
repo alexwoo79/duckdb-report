@@ -13,7 +13,7 @@ WHERE order_date::DATE BETWEEN DATE '{{start_date}}' AND DATE '{{end_date}}'
 GROUP BY 1, 2, 3
 ORDER BY 1, 2, 3;
 
-CREATE OR REPLACE TABLE kpi_summary AS
+CREATE OR REPLACE TABLE monthly_kpi_summary AS
 SELECT
     round(sum(revenue), 2) AS revenue,
     round(sum(cost), 2) AS cost,

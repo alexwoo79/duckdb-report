@@ -489,6 +489,21 @@ func upgradeLegacyDefaults(store *Store, seed fs.FS) error {
 		return fmt.Errorf("inspect result sql: %w", err)
 	}
 
+	analysisSQLPath := filepath.Join(store.SQL, "monthly_analysis.sql")
+	currentAnalysisSQL, err := os.ReadFile(analysisSQLPath)
+	if err == nil && bytes.Contains(currentAnalysisSQL, []byte("CREATE OR REPLACE TABLE kpi_summary")) {
+		currentAnalysisSQL = bytes.ReplaceAll(
+			currentAnalysisSQL,
+			[]byte("CREATE OR REPLACE TABLE kpi_summary"),
+			[]byte("CREATE OR REPLACE TABLE monthly_kpi_summary"),
+		)
+		if writeErr := os.WriteFile(analysisSQLPath, currentAnalysisSQL, 0o644); writeErr != nil {
+			return fmt.Errorf("upgrade analysis SQL table name: %w", writeErr)
+		}
+	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("inspect analysis sql: %w", err)
+	}
+
 	currentWorkflow, err := os.ReadFile(store.WorkflowFile)
 	if err != nil {
 		return fmt.Errorf("inspect workflow for upgrades: %w", err)

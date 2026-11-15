@@ -675,7 +675,9 @@ func (a *App) ensureDemoData(ctx context.Context) error {
 func (a *App) ensureExampleData(ctx context.Context) error {
 	marker := filepath.Join(a.store.Root, ".monthly-sales-example-v1")
 	if _, err := os.Stat(marker); err == nil {
-		return nil
+		if _, queryErr := a.database.Query(ctx, "SELECT customers FROM kpi_summary LIMIT 0", 1); queryErr == nil {
+			return nil
+		}
 	}
 	exampleRoot := filepath.Join(a.store.Root, "examples", "monthly_sales")
 	dataFiles := []struct {
