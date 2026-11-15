@@ -1,0 +1,135 @@
+---
+title: "{{title}}"
+subtitle: "R / DuckDB 组合分析报告"
+author: "DuckDB Report Studio"
+date: today
+lang: zh-CN
+format:
+  html:
+    theme: cosmo
+    css:
+      - assets/report.css
+    toc: true
+    toc-depth: 2
+    embed-resources: true
+  typst:
+    papersize: a4
+    mainfont: "{{report_font}}"
+    fontsize: 9pt
+    margin:
+      x: 14mm
+      y: 14mm
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: setup
+#| include: false
+library(DBI)
+library(duckdb)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(scales)
+
+database_path <- "{{database}}"
+top_n <- as.integer("{{top_n}}")
+
+drv <- duckdb()
+con <- dbConnect(drv, dbdir = database_path, read_only = TRUE)
+
+kpis <- dbGetQuery(con, "SELECT * FROM kpi_summary")
+trend <- dbGetQuery(con, "SELECT * FROM monthly_trend ORDER BY month")
+pivot <- dbGetQuery(con, "SELECT * FROM region_category_pivot ORDER BY total_revenue DESC")
+products <- dbGetQuery(
+  con,
+  sprintf(
+    "SELECT * FROM product_ranking ORDER BY revenue DESC LIMIT %d",
+    top_n
+  )
+)
+```
+
+## 核心指标
+
+```{r}
+#| results: asis
+cat(
+  '<div class="kpi-grid">',
+  sprintf('<div class="kpi"><span>订单数</span><strong>%s</strong></div>',
+          comma(kpis$orders)),
+  sprintf('<div class="kpi"><span>客户数</span><strong>%s</strong></div>',
+          comma(kpis$customers)),
+  sprintf('<div class="kpi"><span>销售收入</span><strong>¥%s</strong></div>',
+          comma(kpis$revenue)),
+  sprintf('<div class="kpi"><span>毛利率</span><strong>%.2f%%</strong></div>',
+          kpis$margin_pct),
+  "</div>",
+  sep = ""
+)
+```
+
+## 月度趋势
+
+```{r}
+#| fig-cap: "月度销售收入"
+trend |>
+  mutate(month = as.Date(month)) |>
+  ggplot(aes(x = month, y = revenue)) +
+  geom_line(color = "#b86316", linewidth = 1.2) +
+  geom_point(color = "#b86316", size = 2.4) +
+  scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
+  scale_x_date(labels = date_format("%Y-%m")) +
+  labs(x = NULL, y = "收入") +
+  theme_minimal(base_family = "{{report_font}}") +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    plot.background = element_rect(fill = "white", color = NA)
+  )
+```
+
+## 区域 × 品类透视
+
+```{r}
+#| label: pivot-table
+knitr::kable(
+  pivot,
+  format = if (knitr::is_html_output()) "html" else "pipe",
+  digits = 2,
+  col.names = c("区域", "办公家具", "电子设备", "办公用品",
+                "总收入", "毛利", "毛利率%")
+)
+```
+
+## 重点产品
+
+```{r}
+#| label: product-table
+knitr::kable(
+  products,
+  format = if (knitr::is_html_output()) "html" else "pipe",
+  digits = 2,
+  col.names = c("产品", "品类", "数量", "收入", "毛利", "毛利率%")
+)
+```
+
+## 结论
+
+```{r}
+#| results: asis
+cat(sprintf(
+  "收入最高区域是 **%s**，收入 **¥%s**；排名第一的产品是 **%s**，贡献收入 **¥%s**。",
+  pivot$region[1], comma(pivot$total_revenue[1]),
+  products$product_name[1], comma(products$revenue[1])
+))
+```
+
+```{r}
+#| label: cleanup
+#| include: false
+dbDisconnect(con, shutdown = TRUE)
+```

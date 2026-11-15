@@ -1,0 +1,105 @@
+{
+  "id": "monthly_sales_python",
+  "name": "月度销售分析（Python）",
+  "description": "导入四张业务子表，Join 为订单事实表，汇总、透视并生成 Python/Quarto 报告。",
+  "runtime": {
+    "title": "月度销售分析（Python）",
+    "start_date": "2026-01-01",
+    "end_date": "2026-12-31",
+    "top_n": "8"
+  },
+  "presets": [
+    {
+      "id": "source_customers",
+      "type": "datasource",
+      "name": "客户主表",
+      "description": "CSV 客户维度表。",
+      "params": {"kind": "csv", "path": "examples/monthly_sales/data/customers.csv", "table": "customers", "sheet": ""}
+    },
+    {
+      "id": "source_products",
+      "type": "datasource",
+      "name": "产品主表",
+      "description": "CSV 产品维度表。",
+      "params": {"kind": "csv", "path": "examples/monthly_sales/data/products.csv", "table": "products", "sheet": ""}
+    },
+    {
+      "id": "source_orders",
+      "type": "datasource",
+      "name": "订单主表",
+      "description": "CSV 订单头表。",
+      "params": {"kind": "csv", "path": "examples/monthly_sales/data/orders.csv", "table": "orders", "sheet": ""}
+    },
+    {
+      "id": "source_order_items",
+      "type": "datasource",
+      "name": "订单明细",
+      "description": "CSV 订单商品明细表。",
+      "params": {"kind": "csv", "path": "examples/monthly_sales/data/order_items.csv", "table": "order_items", "sheet": ""}
+    },
+    {
+      "id": "sql_join",
+      "type": "sqlset",
+      "name": "四表 Join",
+      "description": "连接客户、订单、明细和产品，生成 order_detail。",
+      "params": {"mode": "file", "file": "examples/monthly_sales/sql/01_join.sql", "inline_sql": "", "query_file": "", "limit": "500"}
+    },
+    {
+      "id": "sql_summary",
+      "type": "sqlset",
+      "name": "月度汇总",
+      "description": "按月份、区域、品类汇总收入、成本、毛利和 KPI。",
+      "params": {"mode": "file", "file": "examples/monthly_sales/sql/02_summary.sql", "inline_sql": "", "query_file": "", "limit": "500"}
+    },
+    {
+      "id": "sql_pivot",
+      "type": "sqlset",
+      "name": "区域品类透视",
+      "description": "生成区域×品类透视、月度趋势和产品排名。",
+      "params": {"mode": "file", "file": "examples/monthly_sales/sql/03_pivot.sql", "inline_sql": "", "query_file": "", "limit": "500"}
+    },
+    {
+      "id": "sql_validation",
+      "type": "sqlset",
+      "name": "勾稽验证",
+      "description": "检查 Join 行数与收入汇总是否一致。",
+      "params": {"mode": "file", "file": "examples/monthly_sales/sql/04_validation.sql", "inline_sql": "", "query_file": "", "limit": "100"}
+    },
+    {
+      "id": "report_python",
+      "type": "report",
+      "name": "Python 分析报告",
+      "description": "Quarto Python/Jupyter 报告，生成 HTML 或 PDF。",
+      "params": {
+        "template": "examples/monthly_sales/reports/monthly_sales_python.qmd",
+        "format": "html",
+        "query": "SELECT * FROM region_category_pivot"
+      }
+    },
+    {
+      "id": "output_python",
+      "type": "output",
+      "name": "Python 报告发布包",
+      "description": "打包 Python 报告、数据库快照和 QMD 源文件。",
+      "params": {
+        "filename": "monthly-sales-python",
+        "directory": "exports",
+        "include_report": "true",
+        "include_database": "true",
+        "include_source": "true"
+      }
+    }
+  ],
+  "steps": [
+    {"id": "import_customers", "name": "导入客户", "kind": "import", "presetId": "source_customers", "enabled": true},
+    {"id": "import_products", "name": "导入产品", "kind": "import", "presetId": "source_products", "enabled": true},
+    {"id": "import_orders", "name": "导入订单", "kind": "import", "presetId": "source_orders", "enabled": true},
+    {"id": "import_items", "name": "导入订单明细", "kind": "import", "presetId": "source_order_items", "enabled": true},
+    {"id": "join", "name": "四表 Join", "kind": "sql", "presetId": "sql_join", "enabled": true},
+    {"id": "summary", "name": "月度汇总", "kind": "sql", "presetId": "sql_summary", "enabled": true},
+    {"id": "pivot", "name": "透视分析", "kind": "sql", "presetId": "sql_pivot", "enabled": true},
+    {"id": "validate", "name": "勾稽验证", "kind": "sql", "presetId": "sql_validation", "enabled": true},
+    {"id": "render", "name": "生成 Python 报告", "kind": "render", "presetId": "report_python", "enabled": true},
+    {"id": "export", "name": "打包报告与数据", "kind": "export", "presetId": "output_python", "enabled": true}
+  ]
+}

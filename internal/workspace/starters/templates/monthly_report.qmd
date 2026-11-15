@@ -1,0 +1,52 @@
+---
+title: "{{title}}"
+subtitle: "DuckDB 本地分析工作流"
+date: today
+lang: zh-CN
+format:
+  html:
+    theme: cosmo
+    css:
+      - assets/report.css
+    toc: true
+    embed-resources: true
+    code-fold: true
+  typst:
+    papersize: a4
+    mainfont: "{{report_font}}"
+    fontsize: 8.6pt
+    linestretch: 1.24
+    toc: true
+    toc-depth: 2
+    section-numbering: "1.1"
+    margin:
+      x: 14mm
+      y: 14mm
+    page-numbering: "1 / 1"
+    fig-align: center
+    tbl-cap-location: top
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## 本期概览
+
+本报告由 **DuckDB + SQL + Quarto** 自动生成。参数范围：
+`{{start_date}}` 至 `{{end_date}}`。
+
+::: {.callout-note}
+所有指标均来自本地 DuckDB 工作库，报告产物可以离线归档和分享。
+正文下方的数据表由 Go 后端注入，不需要 R 或 Python 运行时。
+:::
+
+## 明细
+
+{{table}}
+
+## 解读建议
+
+- 优先查看毛利率偏低且收入规模较大的产品组合。
+- 将区域趋势与负责人跟进节奏结合，识别异常波动。
+- 通过工作流参数切换统计区间，无需修改 SQL 主体。

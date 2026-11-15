@@ -1,0 +1,90 @@
+{
+  "id": "demo-monthly",
+  "name": "月度经营分析",
+  "description": "导入销售明细，执行 SQL 聚合，并渲染为可预览的经营报告。",
+  "runtime": {
+    "title": "月度经营分析",
+    "start_date": "2026-01-01",
+    "end_date": "2026-12-31"
+  },
+  "presets": [
+    {
+      "id": "source-sales",
+      "type": "datasource",
+      "name": "销售明细 CSV",
+      "description": "示例数据源，导入时会在工作库中重建 sales 表。",
+      "params": {
+        "kind": "csv",
+        "path": "data/sales.csv",
+        "table": "sales"
+      }
+    },
+    {
+      "id": "sql-monthly",
+      "type": "sqlset",
+      "name": "月度经营口径",
+      "description": "按月份、区域与产品汇总收入、成本和毛利。",
+      "params": {
+        "mode": "file",
+        "file": "sql/monthly_analysis.sql",
+        "inline_sql": "",
+        "query_file": "sql/monthly_result.sql",
+        "limit": "500"
+      }
+    },
+    {
+      "id": "report-monthly",
+      "type": "report",
+      "name": "经营月报模板",
+      "description": "Quarto QMD 模板，默认输出自包含 HTML。",
+      "params": {
+        "template": "templates/monthly_report.qmd",
+        "format": "html",
+        "query": "SELECT strftime(month, '%Y-%m') AS month, region, product, orders, revenue, cost, gross_profit, gross_margin_pct FROM monthly_summary ORDER BY month, region, product"
+      }
+    },
+    {
+      "id": "output-default",
+      "type": "output",
+      "name": "报告与数据发布包",
+      "description": "将报告、数据库快照和 QMD 源文件打包为 ZIP。",
+      "params": {
+        "filename": "report-package",
+        "directory": "exports",
+        "include_report": "true",
+        "include_database": "true",
+        "include_source": "true"
+      }
+    }
+  ],
+  "steps": [
+    {
+      "id": "import",
+      "name": "导入销售明细",
+      "kind": "import",
+      "presetId": "source-sales",
+      "enabled": true
+    },
+    {
+      "id": "analyze",
+      "name": "计算月度汇总",
+      "kind": "sql",
+      "presetId": "sql-monthly",
+      "enabled": true
+    },
+    {
+      "id": "render",
+      "name": "渲染经营报告",
+      "kind": "render",
+      "presetId": "report-monthly",
+      "enabled": true
+    },
+    {
+      "id": "export",
+      "name": "打包报告与数据",
+      "kind": "export",
+      "presetId": "output-default",
+      "enabled": true
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+# DuckDB Report Studio
+
+> A local Wails desktop workbench for reproducible DuckDB SQL analysis and Quarto report delivery.
+
+## Primary documentation
+
+- [README](README.md)
+- [Installation and runtime requirements](docs/INSTALL.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+
+## Architecture
+
+- Go 1.26 backend and Wails 2.13 desktop shell.
+- Vue 3 and TypeScript frontend.
+- Embedded DuckDB 2.0 database driver.
+- Quarto 1.8 for QMD reports.
+- Workflow model: data source or SQL or report or export presets connected as ordered steps.
+
+## Entry points
+
+- `main.go`: Wails application bootstrap.
+- `app.go`: desktop API boundary and workspace lifecycle.
+- `internal/runner`: workflow execution.
+- `internal/database`: DuckDB access and import.
+- `internal/report`: Quarto rendering and report table generation.
+- `frontend/src/App.vue`: workbench UI.
+
+## Runtime notes
+
+- Basic SQL analysis needs no external database server.
+- Python QMD reports require Jupyter, pandas, matplotlib, and duckdb.
+- R QMD reports require DBI, duckdb, dplyr, ggplot2, knitr, scales, and rmarkdown.
+- PDF reports use Quarto Typst output.

@@ -1,0 +1,119 @@
+---
+title: "{{title}}"
+subtitle: "Python / DuckDB 组合分析报告"
+author: "DuckDB Report Studio"
+date: today
+lang: zh-CN
+format:
+  html:
+    theme: cosmo
+    css:
+      - assets/report.css
+    toc: true
+    toc-depth: 2
+    embed-resources: true
+  typst:
+    papersize: a4
+    mainfont: "{{report_font}}"
+    fontsize: 9pt
+    margin:
+      x: 14mm
+      y: 14mm
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{python}
+#| label: setup
+import duckdb
+import pandas as pd
+import matplotlib.pyplot as plt
+from IPython.display import Markdown, display
+
+DATABASE_PATH = "{{database}}"
+TOP_N = int("{{top_n}}")
+plt.rcParams["font.sans-serif"] = [
+    "{{report_font}}",
+    "PingFang SC",
+    "Microsoft YaHei",
+    "Noto Sans CJK SC",
+    "Arial Unicode MS",
+    "sans-serif",
+]
+plt.rcParams["axes.unicode_minus"] = False
+
+con = duckdb.connect(DATABASE_PATH, read_only=True)
+kpis = con.execute("SELECT * FROM kpi_summary").df().iloc[0]
+trend = con.execute("SELECT * FROM monthly_trend ORDER BY month").df()
+pivot = con.execute("SELECT * FROM region_category_pivot ORDER BY total_revenue DESC").df()
+products = con.execute(
+    "SELECT * FROM product_ranking ORDER BY revenue DESC LIMIT ?",
+    [TOP_N],
+).df()
+```
+
+## 核心指标
+
+```{python}
+cards = f"""
+<div class="kpi-grid">
+  <div class="kpi"><span>订单数</span><strong>{int(kpis['orders']):,}</strong></div>
+  <div class="kpi"><span>客户数</span><strong>{int(kpis['customers']):,}</strong></div>
+  <div class="kpi"><span>销售收入</span><strong>¥{kpis['revenue']:,.0f}</strong></div>
+  <div class="kpi"><span>毛利率</span><strong>{kpis['margin_pct']:.2f}%</strong></div>
+</div>
+"""
+display(Markdown(cards))
+```
+
+## 月度趋势
+
+```{python}
+fig, ax = plt.subplots(figsize=(10, 3.8))
+ax.plot(trend["month"].astype(str), trend["revenue"], marker="o", color="#b86316", linewidth=2.2)
+ax.fill_between(trend["month"].astype(str), trend["revenue"], color="#b86316", alpha=0.10)
+ax.set_title("月度销售收入")
+ax.set_ylabel("收入（元）")
+ax.grid(axis="y", color="#e7ebe9")
+ax.spines[["top", "right"]].set_visible(False)
+plt.xticks(rotation=25)
+display(fig)
+plt.close(fig)
+```
+
+## 区域 × 品类透视
+
+```{python}
+display(Markdown(pivot.to_html(
+    index=False,
+    border=0,
+    classes="report-table",
+    float_format=lambda value: f"{value:,.2f}",
+)))
+```
+
+## 重点产品
+
+```{python}
+display(Markdown(products.to_html(
+    index=False,
+    border=0,
+    classes="report-table",
+    float_format=lambda value: f"{value:,.2f}",
+)))
+```
+
+## 结论
+
+```{python}
+top_region = pivot.iloc[0]
+top_product = products.iloc[0]
+display(Markdown(
+    f"收入最高区域是 **{top_region['region']}**，收入 "
+    f"**¥{top_region['total_revenue']:,.0f}**；"
+    f"排名第一的产品是 **{top_product['product_name']}**，"
+    f"贡献收入 **¥{top_product['revenue']:,.0f}**。"
+))
+```

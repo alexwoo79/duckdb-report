@@ -1,0 +1,140 @@
+:root {
+  --ink: #162a33;
+  --ink-soft: #34464f;
+  --muted: #68767d;
+  --line: #d5dcda;
+  --canvas: #f5f5f1;
+  --surface: #ffffff;
+  --teal: #166b61;
+  --teal-soft: #edf4f2;
+  --amber: #b86316;
+}
+
+html {
+  background: var(--canvas);
+}
+
+body {
+  width: min(1180px, calc(100% - 48px));
+  margin: 0 auto;
+  padding-bottom: 4rem;
+  color: var(--ink-soft);
+  background: var(--canvas);
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+}
+
+#title-block-header {
+  margin: 0 0 1.8rem;
+  padding: 2.2rem 0 1.7rem;
+  border-top: 5px solid var(--ink);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+
+#title-block-header h1.title {
+  color: var(--ink);
+  font-size: clamp(2rem, 4vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+#title-block-header p.subtitle {
+  color: var(--muted);
+  font-size: 1.06rem;
+}
+
+#TOC {
+  margin: 0 0 2rem;
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+}
+
+.callout {
+  border-radius: 4px;
+}
+
+.callout-note {
+  border-left-color: var(--teal);
+  background: var(--teal-soft);
+}
+
+.duckdb-report-table {
+  margin: 1.2rem 0 2rem;
+  overflow-x: auto;
+  border-top: 2px solid var(--ink);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.duckdb-report-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.duckdb-report-table thead th {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  background: #eef2f0;
+  font-weight: 650;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.duckdb-report-table tbody td {
+  padding: 0.58rem 0.75rem;
+  border-bottom: 1px solid #e7ebea;
+  color: var(--ink-soft);
+  vertical-align: top;
+}
+
+.duckdb-report-table tbody tr:nth-child(even) {
+  background: #fafbf9;
+}
+
+.duckdb-report-table tbody tr:hover {
+  background: var(--teal-soft);
+}
+
+.duckdb-report-table .null {
+  color: #9aa4a7;
+  font-style: italic;
+}
+
+.duckdb-report-table .table-note {
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+@page {
+  size: A4;
+  margin: 14mm;
+}
+
+@media print {
+  html,
+  body {
+    background: #fff;
+  }
+
+  #TOC,
+  #quarto-margin-sidebar {
+    display: none !important;
+  }
+
+  .duckdb-report-table {
+    overflow: visible;
+  }
+
+  h2,
+  table {
+    break-after: avoid;
+  }
+}
