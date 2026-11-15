@@ -104,7 +104,7 @@ jobs:
         shell: pwsh
         run: |
           $stage = "dist/stage/duckdb-report-windows-amd64"
-          New-Item -ItemType Directory -Force -Path "$stage/skill/docs" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$stage/skill", "$stage/docs" | Out-Null
           Copy-Item build/bin/* $stage -Recurse
           Copy-Item .skill-source/codex-skills/duckdb-sql-analytics `
             "$stage/skill/" -Recurse
