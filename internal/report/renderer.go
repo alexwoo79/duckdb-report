@@ -113,25 +113,9 @@ func (r *Renderer) Render(ctx context.Context, request model.RenderRequest) (mod
 		}
 	}
 
-	contentWithTable := request.Content
-	if strings.Contains(contentWithTable, "{{table}}") {
-		tableContent := "<p><em>没有配置报告数据查询。</em></p>"
-		if strings.TrimSpace(request.Query) != "" {
-			resolvedQuery, resolveErr := workflow.ResolveTemplate(request.Query, params)
-			if resolveErr != nil {
-				return model.RenderResult{}, resolveErr
-			}
-			queryResult, queryErr := r.database.Query(ctx, resolvedQuery, 2000)
-			if queryErr != nil {
-				return model.RenderResult{}, fmt.Errorf("build report table: %w", queryErr)
-			}
-			if format == "pdf" {
-				tableContent = TypstTable(queryResult)
-			} else {
-				tableContent = HTMLTable(queryResult)
-			}
-		}
-		contentWithTable = strings.ReplaceAll(contentWithTable, "{{table}}", tableContent)
+	contentWithTable, err := r.injectReportTables(ctx, request.Content, request.Query, params, format)
+	if err != nil {
+		return model.RenderResult{}, err
 	}
 	resolvedContent, err := workflow.ResolveTemplate(contentWithTable, params)
 	if err != nil {
@@ -215,6 +199,84 @@ func (r *Renderer) Render(ctx context.Context, request model.RenderRequest) (mod
 		Format:      format,
 		Log:         logLines,
 	}, nil
+}
+
+func (r *Renderer) injectReportTables(
+	ctx context.Context,
+	content string,
+	primaryQuery string,
+	params map[string]string,
+	format string,
+) (string, error) {
+	if primaryTable.MatchString(content) {
+		query := primaryQuery
+		if strings.TrimSpace(query) == "" {
+			query = params["query"]
+		}
+		tableContent, err := r.buildReportTable(ctx, query, params, format)
+		if err != nil {
+			return "", err
+		}
+		content = primaryTable.ReplaceAllStringFunc(content, func(string) string {
+			return tableContent
+		})
+	}
+
+	matches := namedTable.FindAllStringSubmatch(content, -1)
+	if len(matches) == 0 {
+		return content, nil
+	}
+	tables := make(map[string]string, len(matches))
+	for _, match := range matches {
+		name := match[1]
+		if _, exists := tables[name]; exists {
+			continue
+		}
+		parameter := "query_" + name
+		query, exists := params[parameter]
+		if !exists {
+			return "", fmt.Errorf("report table query %s is missing for {{table_%s}}", parameter, name)
+		}
+		tableContent, err := r.buildReportTable(ctx, query, params, format)
+		if err != nil {
+			return "", fmt.Errorf("build report table %s: %w", name, err)
+		}
+		tables[name] = tableContent
+	}
+	content = namedTable.ReplaceAllStringFunc(content, func(placeholder string) string {
+		match := namedTable.FindStringSubmatch(placeholder)
+		if len(match) != 2 {
+			return placeholder
+		}
+		return tables[match[1]]
+	})
+	return content, nil
+}
+
+func (r *Renderer) buildReportTable(
+	ctx context.Context,
+	query string,
+	params map[string]string,
+	format string,
+) (string, error) {
+	if strings.TrimSpace(query) == "" {
+		return "<p><em>没有配置报告数据查询。</em></p>", nil
+	}
+	if r.database == nil {
+		return "", errors.New("report table query requires a DuckDB database")
+	}
+	resolvedQuery, err := workflow.ResolveTemplate(query, params)
+	if err != nil {
+		return "", err
+	}
+	queryResult, err := r.database.Query(ctx, resolvedQuery, 2000)
+	if err != nil {
+		return "", fmt.Errorf("build report table: %w", err)
+	}
+	if format == "pdf" {
+		return TypstTable(queryResult), nil
+	}
+	return HTMLTable(queryResult), nil
 }
 
 func defaultReportFont(goos string) string {

@@ -265,6 +265,86 @@ func TestRenderReplacesTablePlaceholderBeforeVariables(t *testing.T) {
 	}
 }
 
+func TestRenderReplacesNamedTablePlaceholders(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	store, err := workspace.New(root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), store.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := db.Close(); closeErr != nil {
+			t.Errorf("Close() error = %v", closeErr)
+		}
+	})
+	if _, err := db.Query(context.Background(), `
+		CREATE TABLE report_sales(value VARCHAR);
+		INSERT INTO report_sales VALUES ('sales-value');
+		CREATE TABLE report_products(value VARCHAR);
+		INSERT INTO report_products VALUES ('product-value');
+	`, 10); err != nil {
+		t.Fatal(err)
+	}
+	quarto := filepath.Join(root, "fake-quarto")
+	script := "#!/bin/sh\nwhile [ \"$#\" -gt 0 ]; do if [ \"$1\" = \"--output\" ]; then shift; out=\"$1\"; fi; shift; done\nprintf '<html><body>ok</body></html>' > \"$out\"\n"
+	if err := os.WriteFile(quarto, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	renderer := NewRenderer(quarto, store, db)
+	result, err := renderer.Render(context.Background(), model.RenderRequest{
+		Content: "## 销售\n\n{{table_sales}}\n\n## 产品\n\n{{ table_products }}\n",
+		Format:  "html",
+		Params: map[string]string{
+			"query_sales":    "SELECT * FROM report_sales",
+			"query_products": "SELECT * FROM report_products",
+		},
+		SaveAs: "multi-table-report",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runDir, err := store.RunDir(result.RunID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rendered, err := os.ReadFile(filepath.Join(runDir, "report.qmd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(rendered)
+	if strings.Contains(content, "{{table_") {
+		t.Fatalf("named table placeholders were not resolved:\n%s", content)
+	}
+	for _, expected := range []string{"sales-value", "product-value"} {
+		if !strings.Contains(content, expected) {
+			t.Fatalf("rendered report missing %q:\n%s", expected, content)
+		}
+	}
+}
+
+func TestRenderRejectsMissingNamedTableQuery(t *testing.T) {
+	t.Parallel()
+	store, err := workspace.New(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	renderer := NewRenderer("", store, nil)
+	_, err = renderer.injectReportTables(
+		context.Background(),
+		"{{table_missing}}",
+		"",
+		map[string]string{},
+		"html",
+	)
+	if err == nil || !strings.Contains(err.Error(), "query_missing") {
+		t.Fatalf("injectReportTables() error = %v, want missing query_missing", err)
+	}
+}
+
 func TestRenderErrorIncludesQuartoLog(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

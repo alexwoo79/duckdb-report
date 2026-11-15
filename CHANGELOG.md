@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.3 - 2026-11-15
+
+### Added
+
+- Support multiple report tables with `query_xxx` Preset parameters and `{{table_xxx}}` placeholders.
+- Pass report Preset parameters into direct report rendering while preserving workflow runtime overrides.
+
 ## v0.1.2 - 2026-11-15
 
 ### Fixed

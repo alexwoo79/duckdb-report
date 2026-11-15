@@ -12,8 +12,8 @@
 
 从 [Releases](https://github.com/alexwoo79/duckdb-report/releases) 下载对应压缩包：
 
-- `duckdb-report-v0.1.2-macos-universal.zip`
-- `duckdb-report-v0.1.2-windows-amd64.zip`
+- `duckdb-report-v0.1.3-macos-universal.zip`
+- `duckdb-report-v0.1.3-windows-amd64.zip`
 
 macOS：
 

@@ -15,6 +15,8 @@ var (
 	rCodeChunk       = regexp.MustCompile("(?m)^```\\s*\\{\\s*r(?:\\s|[,}])")
 	pythonCodeChunk  = regexp.MustCompile("(?m)^```\\s*\\{\\s*python(?:\\s|[,}])")
 	templateVariable = regexp.MustCompile(`\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}`)
+	primaryTable     = regexp.MustCompile(`\{\{\s*table\s*\}\}`)
+	namedTable       = regexp.MustCompile(`\{\{\s*table_([a-zA-Z0-9_.-]+)\s*\}\}`)
 )
 
 type ScriptRequirements struct {

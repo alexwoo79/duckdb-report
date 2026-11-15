@@ -197,6 +197,28 @@ SQL Preset 的 `mode` 参数支持：
 
 `export` 必须位于 `render` 之后；如果没有前置渲染步骤，工作流会明确报错。该数据库快照可独立打开，不会打包正在被应用锁定的 `workspace.duckdb`。
 
+报告 Preset 可以配置多个命名查询，在同一份 QMD 中输出多张表：
+
+```text
+query           → {{table}}
+query_sales     → {{table_sales}}
+query_products  → {{table_products}}
+```
+
+例如 `query_sales` 的值是 `SELECT * FROM sales_summary`，QMD 可以同时写：
+
+```markdown
+## 月度汇总
+
+{{table}}
+
+## 产品排名
+
+{{table_products}}
+```
+
+命名查询与正文占位符必须一一对应；缺少 `query_products` 时，渲染会直接指出缺失参数。
+
 示例 Preset：
 
 ```json

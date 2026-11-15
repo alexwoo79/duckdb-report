@@ -938,9 +938,20 @@ async function loadTemplate(path: string) {
   }
 }
 
+function activeReportPreset(): Preset | undefined {
+  return presets.value.find((preset) => preset.type === "report");
+}
+
 function reportQuery(): string {
-  const reportPreset = presets.value.find((preset) => preset.type === "report");
+  const reportPreset = activeReportPreset();
   return reportPreset?.params.query ?? "SELECT * FROM monthly_summary";
+}
+
+function reportParams(): Record<string, string> {
+  return {
+    ...(activeReportPreset()?.params ?? {}),
+    ...runtimeParams.value,
+  };
 }
 
 async function renderReport(format: "html" | "pdf") {
@@ -962,7 +973,7 @@ async function renderReport(format: "html" | "pdf") {
       content: reportContent.value,
       format,
       query: reportQuery(),
-      params: workflow.value.runtime,
+      params: reportParams(),
       saveAs: workflow.value.name,
       templatePath: selectedTemplate.value,
     });
@@ -1634,7 +1645,7 @@ onMounted(async () => {
                   <input v-model="settingsDraft.displayName" maxlength="80" placeholder="DuckDB Report Studio" />
                 </label>
                 <div class="settings-readonly-grid">
-                  <div><span>当前版本</span><code>0.1.2</code></div>
+                  <div><span>当前版本</span><code>0.1.3</code></div>
                   <div><span>配置文件</span><code>{{ state?.settings.settingsPath }}</code></div>
                 </div>
               </section>
@@ -2064,7 +2075,9 @@ onMounted(async () => {
         <p class="modal-note">
           数据源 Preset 的参数通常为 <code>kind/path/table/sheet</code>；SQL Preset 常用
           <code>file/query_file/limit</code>；报告 Preset 常用
-          <code>template/format/query</code>；输出 Preset 可配置 ZIP 文件名、目录和打包内容。
+          <code>template/format/query</code>，其中 <code>query</code> 输出到
+          <code v-pre>{{table}}</code>，<code>query_xxx</code> 输出到
+          <code v-pre>{{table_xxx}}</code>；输出 Preset 可配置 ZIP 文件名、目录和打包内容。
         </p>
         <div class="modal-actions spread">
           <button
