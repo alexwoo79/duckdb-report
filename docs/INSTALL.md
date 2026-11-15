@@ -15,7 +15,7 @@
 
 - `duckdb-report-v0.1.4-macos-universal.zip`
 - `duckdb-report-v0.1.4-windows-amd64.zip`
-- `duckdb-report-v*-linux-amd64.tar.gz`
+- `duckdb-report-v*-linux-amd64.zip`
 
 macOS：
 
@@ -30,7 +30,7 @@ Windows：
 
 Linux：
 
-1. 解压 `duckdb-report-*-linux-amd64.tar.gz`。
+1. 解压 `duckdb-report-*-linux-amd64.zip`。
 2. 确认已安装 GTK 3 与 WebKitGTK 4.1：
 
    ```bash
@@ -251,6 +251,17 @@ Agent 场景建议配合
 [DuckDB SQL Analytics Skill](https://github.com/alexwoo79/skills_plugins/tree/main/codex-skills/duckdb-sql-analytics)。
 Skill 的入口、SQL 模式和 CLI 调用协议说明位于该仓库的 `SKILL.md` 与
 `references/duckdb-report-integration.md`。
+
+Release 与手动触发的三平台包都包含：
+
+```text
+duckdb_report       # macOS 为 .app，Windows 为 .exe
+duckdb-report-cli   # macOS 为调用 app 内二进制的启动脚本
+skill/duckdb-sql-analytics/
+README.md
+docs/INSTALL.md
+LICENSE
+```
 
 从 macOS 交叉编译 Windows 需要 MinGW-w64。仓库的 GitHub Actions Release 流程使用原生 Windows Runner 构建，可避免本地 CGO 交叉编译问题。
 

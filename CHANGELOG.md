@@ -8,6 +8,7 @@
 - Discover common Linux Quarto, R, Miniforge, Mambaforge, and app-specific Jupyter installation paths for GUI-launched reports.
 - Add `duckdb-report-cli` with JSON commands for workspace status, SQL, imports, report rendering, and workflow validation/execution/import/export.
 - Add a read-only `doctor` command for workflow, SQL, QMD, asset, and runtime diagnostics, with opt-in `EXPLAIN`.
+- Package the desktop app, CLI, documentation, and companion `duckdb-sql-analytics` Skill together for macOS, Windows, and Linux, with manual snapshot packaging support.
 
 ## v0.1.4 - 2026-11-16
 

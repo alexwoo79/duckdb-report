@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -24,11 +25,16 @@ jobs:
             platform: linux/amd64
             artifact: duckdb-report-linux-amd64
     runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.os == 'macos-15-intel' }}
     env:
       GOTOOLCHAIN: go1.26.0
     steps:
       - uses: actions/checkout@v4
+      - name: Checkout companion skill
+        uses: actions/checkout@v4
+        with:
+          repository: alexwoo79/skills_plugins
+          ref: f2ba1a54ae43f06fc8c67daae1551280f4bf0ec3
+          path: .skill-source
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -51,9 +57,6 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
-      - name: Build macOS CLI
-        if: runner.os == 'macOS'
-        run: go build -trimpath -ldflags="-s -w" -o build/bin/duckdb-report-cli-amd64 ./cmd/duckdb-report-cli
       - name: Build Windows CLI
         if: runner.os == 'Windows'
         run: go build -trimpath -ldflags="-s -w" -o build/bin/duckdb-report-cli.exe ./cmd/duckdb-report-cli
@@ -71,42 +74,64 @@ jobs:
       - name: Build Linux app
         if: runner.os == 'Linux'
         run: wails build -platform linux/amd64 -tags webkit2_41 -trimpath
+      - name: Set package version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "PACKAGE_VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          else
+            echo "PACKAGE_VERSION=snapshot-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          fi
       - name: Package macOS app
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          mkdir -p dist/duckdb-report-macos-universal
+          stage="dist/stage/duckdb-report-macos-universal"
+          mkdir -p "$stage/skill"
           ditto build/bin/duckdb_report.app \
-            dist/duckdb-report-macos-universal/duckdb_report.app
-          cp build/bin/duckdb-report-cli-amd64 \
-            dist/duckdb-report-macos-universal/duckdb-report-cli-amd64
+            "$stage/duckdb_report.app"
+          cp build/darwin/duckdb-report-cli "$stage/duckdb-report-cli"
+          chmod +x "$stage/duckdb-report-cli"
+          cp -R .skill-source/codex-skills/duckdb-sql-analytics "$stage/skill/"
+          cp LICENSE README.md "$stage/"
+          mkdir -p "$stage/docs"
+          cp docs/INSTALL.md "$stage/docs/"
           ditto -c -k --sequesterRsrc --keepParent \
-            dist/duckdb-report-macos-universal \
-            "dist/duckdb-report-${GITHUB_REF_NAME}-macos-universal.zip"
+            "$stage" \
+            "dist/duckdb-report-${PACKAGE_VERSION}-macos-universal.zip"
       - name: Package Windows app
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Compress-Archive -Path build/bin/* `
-            -DestinationPath "dist/duckdb-report-$env:GITHUB_REF_NAME-windows-amd64.zip"
+          $stage = "dist/stage/duckdb-report-windows-amd64"
+          New-Item -ItemType Directory -Force -Path "$stage/skill/docs" | Out-Null
+          Copy-Item build/bin/* $stage -Recurse
+          Copy-Item .skill-source/codex-skills/duckdb-sql-analytics `
+            "$stage/skill/" -Recurse
+          Copy-Item LICENSE, README.md $stage
+          Copy-Item docs/INSTALL.md "$stage/docs/"
+          Compress-Archive -Path $stage `
+            -DestinationPath "dist/duckdb-report-$env:PACKAGE_VERSION-windows-amd64.zip"
       - name: Package Linux app
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          mkdir -p dist
-          tar -czf "dist/duckdb-report-${GITHUB_REF_NAME}-linux-amd64.tar.gz" \
-            -C build/bin duckdb_report duckdb-report-cli \
-            -C "$GITHUB_WORKSPACE" LICENSE README.md docs/INSTALL.md
+          stage="dist/stage/duckdb-report-linux-amd64"
+          mkdir -p "$stage/skill" "$stage/docs"
+          cp build/bin/duckdb_report build/bin/duckdb-report-cli "$stage/"
+          cp -R .skill-source/codex-skills/duckdb-sql-analytics "$stage/skill/"
+          cp LICENSE README.md "$stage/"
+          cp docs/INSTALL.md "$stage/docs/"
+          (cd dist/stage && zip -qr "../duckdb-report-${PACKAGE_VERSION}-linux-amd64.zip" duckdb-report-linux-amd64)
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: dist/*
+          path: dist/*.zip
           if-no-files-found: error
 
   publish:
     needs: build
-    if: always()
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
