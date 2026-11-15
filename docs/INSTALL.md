@@ -263,6 +263,9 @@ docs/INSTALL.md
 LICENSE
 ```
 
+手动触发 `Release` 工作流时，默认会创建 `snapshot-<short-sha>` 预发布页面并上传三个 ZIP 与
+`checksums.txt`。若只需要 Actions Artifact，可在触发时关闭 `publish_release`。
+
 从 macOS 交叉编译 Windows 需要 MinGW-w64。仓库的 GitHub Actions Release 流程使用原生 Windows Runner 构建，可避免本地 CGO 交叉编译问题。
 
 ## 6. 常见问题

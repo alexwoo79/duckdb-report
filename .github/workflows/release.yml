@@ -5,6 +5,12 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      publish_release:
+        description: "Create or update a prerelease with the three platform ZIPs"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -131,13 +137,23 @@ jobs:
 
   publish:
     needs: build
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.publish_release) }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
         with:
           path: release-artifacts
           merge-multiple: true
+      - name: Set release name
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "RELEASE_TAG=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+            echo "RELEASE_NAME=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          else
+            echo "RELEASE_TAG=snapshot-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+            echo "RELEASE_NAME=DuckDB Report Studio snapshot ${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          fi
       - name: Create checksums
         run: |
           mkdir -p release-artifacts
@@ -146,6 +162,9 @@ jobs:
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          prerelease: ${{ github.event_name == 'workflow_dispatch' }}
           generate_release_notes: true
           files: release-artifacts/*
           overwrite_files: true

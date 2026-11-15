@@ -104,7 +104,7 @@ wails build -platform windows/amd64
 
 Linux 默认使用 `webkit2_41` 构建标签，并通过 `GOTOOLCHAIN=go1.26.0` 固定已验证的 Wails 2.13 工具链。需要兼容仍只提供 WebKitGTK 4.0 的旧发行版时，可使用 `make build-linux LINUX_WEBKIT_TAGS=webkit2_40`，并在目标发行版上验证对应开发包。
 
-GitHub Actions 的 `v*` 标签发布会分别编译 macOS Universal（Apple Silicon + Intel）、Windows x64 和 Linux x64。也可以手动触发 `Release` 工作流生成三平台 snapshot ZIP；每个包都包含桌面程序、CLI、安装文档和同一提交的 `duckdb-sql-analytics` Skill。
+GitHub Actions 的 `v*` 标签发布会分别编译 macOS Universal（Apple Silicon + Intel）、Windows x64 和 Linux x64。也可以手动触发 `Release` 工作流：默认上传三平台 snapshot ZIP，并创建 `snapshot-<short-sha>` 预发布页面；每个包都包含桌面程序、CLI、安装文档和同一提交的 `duckdb-sql-analytics` Skill。
 
 ## CLI 自动化
 
