@@ -1,10 +1,13 @@
 package workspace
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/alexwoo79/duckdb-report/internal/workflow"
 )
@@ -108,5 +111,33 @@ func TestNewUpgradesFixedMacFontInExistingTemplate(t *testing.T) {
 	}
 	if !strings.Contains(string(upgraded), `mainfont: "{{report_font}}"`) {
 		t.Fatalf("fixed report font was not upgraded: %s", upgraded)
+	}
+}
+
+func TestMigrateLegacyDemoSalesFile(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	path := filepath.Join(root, "sales.csv")
+	legacy := []byte("legacy synthetic sales sample\n")
+	if err := os.WriteFile(path, legacy, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	seed := fstest.MapFS{
+		"data/sales.csv": &fstest.MapFile{Data: []byte("owner\nDemo Rep A\n")},
+	}
+	marker := filepath.Join(root, ".migration")
+	legacyHash := fmt.Sprintf("%x", sha256.Sum256(legacy))
+	if err := migrateLegacyDemoSalesFile(path, seed, legacyHash, marker); err != nil {
+		t.Fatal(err)
+	}
+	upgraded, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(upgraded), "Demo Rep A") {
+		t.Fatalf("legacy demo data was not replaced: %s", upgraded)
+	}
+	if _, err := os.Stat(marker); err != nil {
+		t.Fatalf("migration marker was not created: %v", err)
 	}
 }

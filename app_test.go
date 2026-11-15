@@ -155,3 +155,44 @@ func TestEnsureExampleDataCreatesAnalysisTables(t *testing.T) {
 		t.Fatalf("stale example marker was not repaired: %v", err)
 	}
 }
+
+func TestEnsureDemoDataSanitizesLegacyOwnerNames(t *testing.T) {
+	t.Parallel()
+	store, err := workspace.New(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(context.Background(), store.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := db.Close(); closeErr != nil {
+			t.Errorf("Close() error = %v", closeErr)
+		}
+	})
+	if _, err := db.Query(context.Background(), `
+		CREATE TABLE sales(owner VARCHAR);
+		INSERT INTO sales VALUES ('Legacy Owner');
+	`, 1); err != nil {
+		t.Fatal(err)
+	}
+	samplePath := filepath.Join(store.Data, "sales.csv")
+	if err := store.SaveSource(model.Source{Kind: "csv", Path: samplePath, Table: "sales"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(store.Root, ".demo-sales-owners-v1"), []byte("reimport-pending\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{store: store, database: db}
+	if err := app.ensureDemoData(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	result, err := db.Query(context.Background(), "SELECT owner FROM sales", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Rows) == 0 || fmt.Sprint(result.Rows[0][0]) != "Demo Rep A" {
+		t.Fatalf("sanitized owner = %#v", result.Rows)
+	}
+}

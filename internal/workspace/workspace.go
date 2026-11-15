@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"embed"
 	"encoding/json"
 	"errors"
@@ -22,6 +23,8 @@ import (
 var starterFS embed.FS
 
 var safeIDPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+
+const legacyDemoSalesHash = "2fac6de44239defc1cef625c2f2ea9375f59e1a2705d377c0405e8d4f6ca672a"
 
 type Store struct {
 	Root         string
@@ -474,6 +477,9 @@ func upgradeLegacyDefaults(store *Store, seed fs.FS) error {
 			return fmt.Errorf("upgrade report font: %w", writeErr)
 		}
 	}
+	if err := upgradeLegacyDemoOwners(store, seed); err != nil {
+		return err
+	}
 
 	resultSQLPath := filepath.Join(store.SQL, "monthly_result.sql")
 	currentSQL, err := os.ReadFile(resultSQLPath)
@@ -518,6 +524,39 @@ func upgradeLegacyDefaults(store *Store, seed fs.FS) error {
 		if err := os.WriteFile(store.WorkflowFile, upgraded, 0o644); err != nil {
 			return fmt.Errorf("upgrade workflow report query: %w", err)
 		}
+	}
+	return nil
+}
+
+func upgradeLegacyDemoOwners(store *Store, seed fs.FS) error {
+	return migrateLegacyDemoSalesFile(
+		filepath.Join(store.Data, "sales.csv"),
+		seed,
+		legacyDemoSalesHash,
+		filepath.Join(store.Root, ".demo-sales-owners-v1"),
+	)
+}
+
+func migrateLegacyDemoSalesFile(path string, seed fs.FS, legacyHash, marker string) error {
+	content, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("inspect demo sales data: %w", err)
+	}
+	if fmt.Sprintf("%x", sha256.Sum256(content)) != legacyHash {
+		return nil
+	}
+	replacement, err := fs.ReadFile(seed, "data/sales.csv")
+	if err != nil {
+		return fmt.Errorf("read sanitized demo sales data: %w", err)
+	}
+	if err := os.WriteFile(path, replacement, 0o644); err != nil {
+		return fmt.Errorf("upgrade demo sales owner names: %w", err)
+	}
+	if err := os.WriteFile(marker, []byte("reimport-pending\n"), 0o644); err != nil {
+		return fmt.Errorf("mark demo sales owner migration: %w", err)
 	}
 	return nil
 }

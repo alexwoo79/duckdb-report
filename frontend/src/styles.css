@@ -1292,7 +1292,37 @@ p {
 }
 
 .sql-editor-card {
-  height: min(37vh, 360px);
+  min-height: 0;
+  flex: 0 0 auto;
+  transition: flex-basis 0.16s ease;
+}
+
+.sql-view {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sql-split-layout {
+  min-height: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.pane-head-actions {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.pane-head-actions > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .editor-topline {
@@ -1313,14 +1343,18 @@ p {
 }
 
 .code-editor {
+  position: relative;
   height: calc(100% - 35px);
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  display: block;
   overflow: hidden;
   background: color-mix(in srgb, var(--bg-deep) 72%, var(--panel));
 }
 
 .line-numbers {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 3;
+  width: 44px;
   height: 100%;
   margin: 0;
   padding: 13px 10px;
@@ -1332,7 +1366,31 @@ p {
   user-select: none;
 }
 
+.code-highlight {
+  position: absolute;
+  z-index: 1;
+  inset: 0 0 0 44px;
+  margin: 0;
+  padding: 13px 15px;
+  overflow: hidden;
+  color: var(--text);
+  background: transparent;
+  pointer-events: none;
+  font: 11px/1.7 var(--mono);
+  tab-size: 2;
+  white-space: pre;
+}
+
+.code-highlight code {
+  font: inherit;
+  tab-size: inherit;
+  white-space: inherit;
+}
+
 .code-editor textarea {
+  position: absolute;
+  z-index: 2;
+  inset: 0 0 0 44px;
   width: 100%;
   height: 100%;
   padding: 13px 15px;
@@ -1340,19 +1398,191 @@ p {
   border: 0;
   outline: none;
   resize: none;
-  color: var(--text);
+  color: transparent;
+  caret-color: var(--text);
   background: transparent;
   font: 11px/1.7 var(--mono);
   tab-size: 2;
   white-space: pre;
+  -webkit-text-fill-color: transparent;
+}
+
+.code-editor textarea::selection {
+  background: color-mix(in srgb, var(--blue) 32%, transparent);
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--subtle);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-section,
+.hljs-link {
+  color: var(--orange);
+  font-weight: 600;
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute {
+  color: var(--teal);
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-variable,
+.hljs-template-variable {
+  color: var(--blue);
+}
+
+.hljs-title,
+.hljs-title.function_,
+.hljs-function .hljs-title,
+.hljs-attr,
+.hljs-property,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: #dca34b;
+}
+
+.hljs-meta,
+.hljs-type,
+.hljs-built_in,
+.hljs-builtin-name {
+  color: #c586c0;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 700;
+}
+
+.hljs-code,
+.hljs-formula {
+  color: color-mix(in srgb, var(--text) 78%, var(--teal));
 }
 
 .result-card {
-  height: calc(100% - min(37vh, 360px) - 68px);
   min-height: 0;
-  margin-top: 14px;
+  flex: 1 1 auto;
+  margin-top: 0;
   padding: 14px;
   overflow: hidden;
+}
+
+.sql-result-card {
+  transition: min-height 0.16s ease;
+}
+
+.split-divider {
+  position: relative;
+  flex: 0 0 auto;
+  z-index: 2;
+  border: 0;
+  outline: none;
+  background: transparent;
+  touch-action: none;
+}
+
+.split-divider.horizontal {
+  height: 10px;
+  margin: 5px 0;
+  cursor: row-resize;
+}
+
+.split-divider.vertical {
+  width: 10px;
+  margin: 0 6px;
+  cursor: col-resize;
+}
+
+.split-divider::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 72%, transparent);
+  transition: background 0.14s ease, box-shadow 0.14s ease;
+}
+
+.split-divider span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 25px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--subtle);
+  transform: translate(-50%, -50%);
+  opacity: 0.72;
+}
+
+.split-divider.vertical span {
+  width: 3px;
+  height: 25px;
+}
+
+.split-divider:hover::before,
+.split-divider:focus-visible::before {
+  background: color-mix(in srgb, var(--orange) 24%, var(--border));
+  box-shadow: 0 0 0 2px var(--orange-soft);
+}
+
+.pane-collapsed-strip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--panel-2);
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.pane-collapsed-strip:hover {
+  color: var(--orange);
+  border-color: color-mix(in srgb, var(--orange) 35%, var(--border));
+  background: var(--orange-soft);
+}
+
+.pane-collapsed-strip.horizontal {
+  width: 100%;
+  height: 32px;
+}
+
+.pane-collapsed-strip.vertical {
+  width: 34px;
+  height: 100%;
+  flex-direction: column;
+  writing-mode: vertical-rl;
+}
+
+.pane-collapsed-strip.vertical .app-icon {
+  transform: rotate(90deg);
+}
+
+.is-resizing-sql,
+.is-resizing-sql * {
+  cursor: row-resize !important;
+  user-select: none !important;
+}
+
+.is-resizing-report,
+.is-resizing-report * {
+  cursor: col-resize !important;
+  user-select: none !important;
 }
 
 .result-header {
@@ -1701,6 +1931,8 @@ p {
   height: auto;
   min-height: 0;
   flex: 1;
+  display: flex;
+  gap: 0;
 }
 
 .report-editor,
@@ -1708,6 +1940,12 @@ p {
   min-width: 0;
   height: 100%;
   overflow: hidden;
+  flex: 0 0 auto;
+  transition: flex-basis 0.16s ease;
+}
+
+.report-preview-card {
+  flex: 1 1 auto;
 }
 
 .report-code-editor {

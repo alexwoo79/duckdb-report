@@ -76,6 +76,7 @@ type AppSettings struct {
 
 type SettingsInfo struct {
 	DisplayName       string `json:"displayName"`
+	Version           string `json:"version"`
 	Workspace         string `json:"workspace"`
 	CurrentWorkspace  string `json:"currentWorkspace"`
 	DefaultWorkspace  string `json:"defaultWorkspace"`

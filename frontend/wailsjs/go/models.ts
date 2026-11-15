@@ -16,6 +16,7 @@ export namespace model {
 	}
 	export class SettingsInfo {
 	    displayName: string;
+	    version: string;
 	    workspace: string;
 	    currentWorkspace: string;
 	    defaultWorkspace: string;
@@ -29,6 +30,7 @@ export namespace model {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.displayName = source["displayName"];
+	        this.version = source["version"];
 	        this.workspace = source["workspace"];
 	        this.currentWorkspace = source["currentWorkspace"];
 	        this.defaultWorkspace = source["defaultWorkspace"];

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.4 - 2026-11-16
+
+### Changed
+
+- Replace sample sales owner names with clearly fictional English placeholders.
+- Detect the legacy sample by SHA-256 and refresh both its CSV and DuckDB table without embedding the old names in source code.
+- Add resizable and collapsible SQL editor/result panes.
+- Add resizable and collapsible QMD/HTML report panes.
+- Add syntax highlighting for SQL and QMD editors with synchronized scrolling and line numbers.
+
 ## v0.1.3 - 2026-11-15
 
 ### Added

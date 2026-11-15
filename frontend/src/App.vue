@@ -1,5 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
+import hljs from "highlight.js/lib/core";
+import markdownLanguage from "highlight.js/lib/languages/markdown";
+import sqlLanguage from "highlight.js/lib/languages/sql";
 import AppIcon from "./components/AppIcon.vue";
 import ResultGrid from "./components/ResultGrid.vue";
 import {
@@ -26,6 +29,9 @@ import type {
   Workflow,
   WorkflowStep,
 } from "./types";
+
+hljs.registerLanguage("sql", sqlLanguage);
+hljs.registerLanguage("markdown", markdownLanguage);
 
 interface LogEntry {
   time: string;
@@ -78,6 +84,19 @@ const previewUrl = ref("");
 const previewError = ref("");
 const activeRunID = ref("");
 const renderResult = ref<RenderResult | null>(null);
+const sqlEditorRatio = ref(52);
+const reportEditorRatio = ref(46);
+const sqlEditorCollapsed = ref(false);
+const sqlResultCollapsed = ref(false);
+const reportEditorCollapsed = ref(false);
+const reportPreviewCollapsed = ref(false);
+const sqlSplitRef = ref<HTMLElement | null>(null);
+const reportSplitRef = ref<HTMLElement | null>(null);
+const sqlHighlightLayer = ref<HTMLElement | null>(null);
+const sqlLineNumbers = ref<HTMLElement | null>(null);
+const reportHighlightLayer = ref<HTMLElement | null>(null);
+const reportLineNumbers = ref<HTMLElement | null>(null);
+let stopSplitResize: (() => void) | undefined;
 const sqlDisplayName = computed(
   () => selectedSQL.value || "临时查询（未保存）",
 );
@@ -111,6 +130,127 @@ const visibleTables = computed(() => {
     `${table.catalog}.${table.schema}.${table.name}`.toLowerCase().includes(query),
   );
 });
+
+const highlightedSQL = computed(() =>
+  hljs.highlight(sqlContent.value || " ", {
+    language: "sql",
+    ignoreIllegals: true,
+  }).value,
+);
+
+const highlightedQMD = computed(() => {
+  const highlighted = hljs.highlight(reportContent.value || " ", {
+    language: "markdown",
+    ignoreIllegals: true,
+  }).value;
+  return highlighted.replace(
+    /(\{\{\s*[a-zA-Z0-9_.-]+\s*\}\})/g,
+    '<span class="hljs-template-variable">$1</span>',
+  );
+});
+
+function syncCodeScroll(
+  event: Event,
+  layer: HTMLElement | null,
+  numbers: HTMLElement | null,
+) {
+  const editor = event.currentTarget as HTMLTextAreaElement;
+  if (layer) {
+    layer.scrollTop = editor.scrollTop;
+    layer.scrollLeft = editor.scrollLeft;
+  }
+  if (numbers) {
+    numbers.scrollTop = editor.scrollTop;
+  }
+}
+
+function toggleSQLPane(pane: "editor" | "result") {
+  if (pane === "editor") {
+    sqlEditorCollapsed.value = !sqlEditorCollapsed.value;
+    if (sqlEditorCollapsed.value && sqlResultCollapsed.value) {
+      sqlResultCollapsed.value = false;
+    }
+    if (!sqlEditorCollapsed.value) sqlEditorRatio.value = 52;
+    return;
+  }
+  sqlResultCollapsed.value = !sqlResultCollapsed.value;
+  if (sqlResultCollapsed.value && sqlEditorCollapsed.value) {
+    sqlEditorCollapsed.value = false;
+  }
+  if (!sqlResultCollapsed.value) sqlEditorRatio.value = 52;
+}
+
+function toggleReportPane(pane: "editor" | "preview") {
+  if (pane === "editor") {
+    reportEditorCollapsed.value = !reportEditorCollapsed.value;
+    if (reportEditorCollapsed.value && reportPreviewCollapsed.value) {
+      reportPreviewCollapsed.value = false;
+    }
+    if (!reportEditorCollapsed.value) reportEditorRatio.value = 46;
+    return;
+  }
+  reportPreviewCollapsed.value = !reportPreviewCollapsed.value;
+  if (reportPreviewCollapsed.value && reportEditorCollapsed.value) {
+    reportEditorCollapsed.value = false;
+  }
+  if (!reportPreviewCollapsed.value) reportEditorRatio.value = 46;
+}
+
+function beginSplitResize(kind: "sql" | "report", event: PointerEvent) {
+  if (event.button !== 0) return;
+  const container = kind === "sql" ? sqlSplitRef.value : reportSplitRef.value;
+  if (!container) return;
+  if (
+    (kind === "sql" && (sqlEditorCollapsed.value || sqlResultCollapsed.value)) ||
+    (kind === "report" && (reportEditorCollapsed.value || reportPreviewCollapsed.value))
+  ) {
+    return;
+  }
+  event.preventDefault();
+  stopSplitResize?.();
+  const rect = container.getBoundingClientRect();
+  const total = kind === "sql" ? rect.height : rect.width;
+  const minFirst = kind === "sql" ? 130 : 280;
+  const minSecond = kind === "sql" ? 170 : 300;
+  const dividerSize = 10;
+
+  const onMove = (moveEvent: PointerEvent) => {
+    const position = kind === "sql" ? moveEvent.clientY - rect.top : moveEvent.clientX - rect.left;
+    const available = Math.max(1, total - dividerSize);
+    const first = Math.min(
+      available - minSecond,
+      Math.max(minFirst, position),
+    );
+    const ratio = Math.round((first / available) * 1000) / 10;
+    if (kind === "sql") {
+      sqlEditorRatio.value = Math.min(78, Math.max(22, ratio));
+    } else {
+      reportEditorRatio.value = Math.min(72, Math.max(28, ratio));
+    }
+  };
+  const onUp = () => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onUp);
+    document.body.classList.remove("is-resizing-sql", "is-resizing-report");
+    stopSplitResize = undefined;
+  };
+  document.body.classList.add(kind === "sql" ? "is-resizing-sql" : "is-resizing-report");
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
+  stopSplitResize = onUp;
+}
+
+function nudgeSplit(kind: "sql" | "report", delta: number) {
+  if (kind === "sql") {
+    if (sqlEditorCollapsed.value || sqlResultCollapsed.value) return;
+    sqlEditorRatio.value = Math.min(78, Math.max(22, sqlEditorRatio.value + delta));
+    return;
+  }
+  if (reportEditorCollapsed.value || reportPreviewCollapsed.value) return;
+  reportEditorRatio.value = Math.min(72, Math.max(28, reportEditorRatio.value + delta));
+}
 
 const workflowCompleted = computed(() => {
   if (!workflow.value) return 0;
@@ -1126,6 +1266,10 @@ onMounted(async () => {
   window.runtime?.EventsOn("workflow:event", onWorkflowEvent);
   await loadInitial();
 });
+
+onBeforeUnmount(() => {
+  stopSplitResize?.();
+});
 </script>
 
 <template>
@@ -1504,26 +1648,84 @@ onMounted(async () => {
             </div>
           </div>
 
-          <div class="editor-card sql-editor-card">
-            <div class="editor-topline">
-              <span :class="{ 'scratch-document': !selectedSQL }">{{ sqlDisplayName }}</span>
-              <span>{{ explainSelectedSQL() }}</span>
-            </div>
-            <div class="code-editor sql-code-editor">
-              <pre class="line-numbers" aria-hidden="true">{{ lineNumbers(sqlContent) }}</pre>
-              <textarea v-model="sqlContent" spellcheck="false" aria-label="SQL 编辑器"></textarea>
-            </div>
-          </div>
-
-          <div class="result-card">
-            <div class="result-header">
-              <div>
-                <span class="eyebrow">RESULT SET</span>
-                <h3>查询结果</h3>
+          <div ref="sqlSplitRef" class="sql-split-layout">
+            <section
+              v-if="!sqlEditorCollapsed"
+              class="editor-card sql-editor-card"
+              :style="{ flexBasis: `${sqlEditorRatio}%` }"
+            >
+              <div class="editor-topline">
+                <span :class="{ 'scratch-document': !selectedSQL }">{{ sqlDisplayName }}</span>
+                <div class="pane-head-actions">
+                  <span>{{ explainSelectedSQL() }}</span>
+                  <button type="button" class="text-button" @click="toggleSQLPane('editor')">
+                    收起
+                  </button>
+                </div>
               </div>
-              <button v-if="sqlResult" class="text-button" @click="sqlResult = null">清空</button>
+              <div class="code-editor highlighted-code-editor sql-code-editor">
+                <pre ref="sqlLineNumbers" class="line-numbers" aria-hidden="true">{{ lineNumbers(sqlContent) }}</pre>
+                <pre
+                  ref="sqlHighlightLayer"
+                  class="code-highlight"
+                  aria-hidden="true"
+                ><code v-html="highlightedSQL"></code></pre>
+                <textarea
+                  v-model="sqlContent"
+                  spellcheck="false"
+                  aria-label="SQL 编辑器"
+                  @scroll="syncCodeScroll($event, sqlHighlightLayer, sqlLineNumbers)"
+                ></textarea>
+              </div>
+            </section>
+            <button
+              v-else
+              type="button"
+              class="pane-collapsed-strip horizontal"
+              @click="toggleSQLPane('editor')"
+            >
+              <AppIcon name="terminal" :size="14" />
+              展开 SQL 编辑器
+            </button>
+
+            <div
+              v-if="!sqlEditorCollapsed && !sqlResultCollapsed"
+              class="split-divider horizontal"
+              role="separator"
+              aria-label="调整 SQL 编辑器与查询结果高度"
+              aria-orientation="horizontal"
+              tabindex="0"
+              @pointerdown="beginSplitResize('sql', $event)"
+              @keydown.up.prevent="nudgeSplit('sql', -4)"
+              @keydown.down.prevent="nudgeSplit('sql', 4)"
+            >
+              <span></span>
             </div>
-            <ResultGrid :result="sqlResult" />
+
+            <section v-if="!sqlResultCollapsed" class="result-card sql-result-card">
+              <div class="result-header">
+                <div>
+                  <span class="eyebrow">RESULT SET</span>
+                  <h3>查询结果</h3>
+                </div>
+                <div class="pane-head-actions">
+                  <button v-if="sqlResult" class="text-button" @click="sqlResult = null">清空</button>
+                  <button type="button" class="text-button" @click="toggleSQLPane('result')">
+                    收起
+                  </button>
+                </div>
+              </div>
+              <ResultGrid :result="sqlResult" />
+            </section>
+            <button
+              v-else
+              type="button"
+              class="pane-collapsed-strip horizontal"
+              @click="toggleSQLPane('result')"
+            >
+              <AppIcon name="table" :size="14" />
+              展开查询结果
+            </button>
           </div>
         </section>
 
@@ -1563,24 +1765,70 @@ onMounted(async () => {
             <span v-if="qmdUsesPython" class="runtime-chip" :class="{ success: state?.environment.jupyterAvailable }">Python / Jupyter</span>
           </div>
 
-          <div class="report-layout">
-            <section class="editor-card report-editor">
+          <div ref="reportSplitRef" class="report-layout">
+            <section
+              v-if="!reportEditorCollapsed"
+              class="editor-card report-editor"
+              :style="{ flexBasis: `${reportEditorRatio}%` }"
+            >
               <div class="editor-topline">
                 <span>QMD SOURCE</span>
-                <span>{{ reportContent.split("\n").length }} lines</span>
+                <div class="pane-head-actions">
+                  <span>{{ reportContent.split("\n").length }} lines</span>
+                  <button type="button" class="text-button" @click="toggleReportPane('editor')">
+                    收起
+                  </button>
+                </div>
               </div>
-              <div class="code-editor report-code-editor">
-                <pre class="line-numbers" aria-hidden="true">{{ lineNumbers(reportContent) }}</pre>
-                <textarea v-model="reportContent" spellcheck="false" aria-label="QMD 编辑器"></textarea>
+              <div class="code-editor highlighted-code-editor report-code-editor">
+                <pre ref="reportLineNumbers" class="line-numbers" aria-hidden="true">{{ lineNumbers(reportContent) }}</pre>
+                <pre
+                  ref="reportHighlightLayer"
+                  class="code-highlight"
+                  aria-hidden="true"
+                ><code v-html="highlightedQMD"></code></pre>
+                <textarea
+                  v-model="reportContent"
+                  spellcheck="false"
+                  aria-label="QMD 编辑器"
+                  @scroll="syncCodeScroll($event, reportHighlightLayer, reportLineNumbers)"
+                ></textarea>
               </div>
             </section>
-            <section class="report-preview-card">
+            <button
+              v-else
+              type="button"
+              class="pane-collapsed-strip vertical"
+              @click="toggleReportPane('editor')"
+            >
+              <AppIcon name="file" :size="14" />
+              展开 QMD 编辑器
+            </button>
+
+            <div
+              v-if="!reportEditorCollapsed && !reportPreviewCollapsed"
+              class="split-divider vertical"
+              role="separator"
+              aria-label="调整 QMD 与 HTML 预览宽度"
+              aria-orientation="vertical"
+              tabindex="0"
+              @pointerdown="beginSplitResize('report', $event)"
+              @keydown.left.prevent="nudgeSplit('report', -3)"
+              @keydown.right.prevent="nudgeSplit('report', 3)"
+            >
+              <span></span>
+            </div>
+
+            <section v-if="!reportPreviewCollapsed" class="report-preview-card">
               <div class="preview-toolbar">
                 <div class="preview-tabs">
                   <button class="active">{{ reportFormat.toUpperCase() }}</button>
                   <span>{{ activeRunID || "尚未渲染" }}</span>
                 </div>
                 <div class="preview-actions">
+                  <button type="button" class="text-button" @click="toggleReportPane('preview')">
+                    收起
+                  </button>
                   <button class="text-button" :disabled="!activeRunID" @click="openLatestOutput">
                     <AppIcon name="external" :size="14" /> 打开产物
                   </button>
@@ -1611,6 +1859,15 @@ onMounted(async () => {
                 <p>Quarto 会生成自包含 HTML 或 PDF，并保留运行目录中的源码与日志。</p>
               </div>
             </section>
+            <button
+              v-else
+              type="button"
+              class="pane-collapsed-strip vertical"
+              @click="toggleReportPane('preview')"
+            >
+              <AppIcon name="report" :size="14" />
+              展开报告预览
+            </button>
           </div>
         </section>
 
@@ -1645,7 +1902,7 @@ onMounted(async () => {
                   <input v-model="settingsDraft.displayName" maxlength="80" placeholder="DuckDB Report Studio" />
                 </label>
                 <div class="settings-readonly-grid">
-                  <div><span>当前版本</span><code>0.1.3</code></div>
+                  <div><span>当前版本</span><code>{{ state?.settings.version || "未知" }}</code></div>
                   <div><span>配置文件</span><code>{{ state?.settings.settingsPath }}</code></div>
                 </div>
               </section>
@@ -1761,7 +2018,7 @@ onMounted(async () => {
                 <span class="eyebrow">ABOUT</span>
                 <h2>{{ state?.settings.displayName }}</h2>
                 <p>本地 DuckDB + SQL + Quarto 分析工作台。数据与报告默认不会上传到外部服务。</p>
-                <code>duckdb_report · Go + Vue 3 + Wails</code>
+                <code>duckdb_report {{ state?.settings.version }} · Go + Vue 3 + Wails</code>
               </section>
             </div>
           </div>

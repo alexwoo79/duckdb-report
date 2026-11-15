@@ -21,6 +21,7 @@ import (
 	"github.com/alexwoo79/duckdb-report/internal/report"
 	"github.com/alexwoo79/duckdb-report/internal/runner"
 	"github.com/alexwoo79/duckdb-report/internal/settings"
+	appversion "github.com/alexwoo79/duckdb-report/internal/version"
 	"github.com/alexwoo79/duckdb-report/internal/workflow"
 	"github.com/alexwoo79/duckdb-report/internal/workflowbundle"
 	"github.com/alexwoo79/duckdb-report/internal/workspace"
@@ -654,12 +655,34 @@ func (a *App) ensureDemoData(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	samplePath := filepath.Join(a.store.Data, "sales.csv")
+	migrationMarker := filepath.Join(a.store.Root, ".demo-sales-owners-v1")
+	tableExists := false
 	for _, table := range tables {
 		if table.Catalog == "workspace" && table.Schema == "main" && table.Name == "sales" {
-			return nil
+			tableExists = true
+			break
 		}
 	}
-	samplePath := filepath.Join(a.store.Data, "sales.csv")
+	if tableExists {
+		if a.isDemoSalesSource(samplePath) {
+			if _, err := os.Stat(migrationMarker); err == nil {
+				imported, importErr := a.database.Import(ctx, model.ImportRequest{
+					Path: samplePath, Table: "sales",
+				})
+				if importErr != nil {
+					return fmt.Errorf("refresh sanitized starter sales data: %w", importErr)
+				}
+				if saveErr := a.store.SaveSource(imported.Source); saveErr != nil {
+					return saveErr
+				}
+				if removeErr := os.Remove(migrationMarker); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
+					return fmt.Errorf("finish demo sales owner migration: %w", removeErr)
+				}
+			}
+		}
+		return nil
+	}
 	if _, err := os.Stat(samplePath); err != nil {
 		return nil
 	}
@@ -669,7 +692,26 @@ func (a *App) ensureDemoData(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("import starter sales data: %w", err)
 	}
-	return a.store.SaveSource(imported.Source)
+	if err := a.store.SaveSource(imported.Source); err != nil {
+		return err
+	}
+	if err := os.Remove(migrationMarker); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("finish demo sales owner migration: %w", err)
+	}
+	return nil
+}
+
+func (a *App) isDemoSalesSource(samplePath string) bool {
+	sources, err := a.store.LoadSources()
+	if err != nil {
+		return false
+	}
+	for _, source := range sources {
+		if source.Table == "sales" && sameFilePath(source.Path, samplePath) {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *App) ensureExampleData(ctx context.Context) error {
@@ -764,6 +806,7 @@ func (a *App) settingsInfoLocked() model.SettingsInfo {
 	}
 	return model.SettingsInfo{
 		DisplayName:       a.displayName(),
+		Version:           appversion.Current,
 		Workspace:         a.config.Workspace,
 		CurrentWorkspace:  currentWorkspace,
 		DefaultWorkspace:  a.defaultWorkspace,

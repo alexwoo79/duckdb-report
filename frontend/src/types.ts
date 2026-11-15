@@ -66,6 +66,7 @@ export interface AppSettings {
 
 export interface SettingsInfo {
   displayName: string;
+  version: string;
   workspace: string;
   currentWorkspace: string;
   defaultWorkspace: string;
