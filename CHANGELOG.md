@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Add Linux x64 desktop builds, CI verification, and release packaging for WebKitGTK 4.1.
+- Discover common Linux Quarto, R, Miniforge, Mambaforge, and app-specific Jupyter installation paths for GUI-launched reports.
+- Add `duckdb-report-cli` with JSON commands for workspace status, SQL, imports, report rendering, and workflow validation/execution/import/export.
+- Add a read-only `doctor` command for workflow, SQL, QMD, asset, and runtime diagnostics, with opt-in `EXPLAIN`.
+
 ## v0.1.4 - 2026-11-16
 
 ### Changed

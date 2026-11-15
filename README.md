@@ -21,7 +21,7 @@
 - SQL Preset 支持 `file` 文件模式与 `inline` 完整 SQL 模式，并可打开原生 SQL 文件选择器。
 - 工作流支持 ZIP 包导出/导入，包含工作流定义及引用的 SQL、QMD、模板样式和数据文件。
 - 报告后可追加输出节点，把 HTML/PDF、QMD、assets 与该次报告的 `analysis.duckdb` 快照一起打包为 ZIP。
-- macOS 与 Windows 发布包使用 `duckui_notebook` 的应用图标。
+- macOS、Windows 与 Linux 发布包支持原生桌面运行，界面沿用 `duckui_notebook` 的图标与视觉风格。
 - 使用 `{{variable}}` 在 SQL、QMD、路径和查询中共享参数。
 - 工作流步骤实时状态、运行日志和独立产物目录。
 - 设置页可修改应用显示名、目标工作区和主题，并查看报告运行时状态。
@@ -32,6 +32,7 @@
 
 ```text
 main.go / app.go    Wails 桌面入口与前端绑定
+internal/cli        CLI 命令树与无界面工作区执行
 internal/database   DuckDB 会话、数据导入、SQL 执行
 internal/report     Quarto 渲染与报告表格生成
 internal/runner     Workflow 步骤编排
@@ -49,6 +50,7 @@ example             四表 Join → 汇总 → 透视 → Python/R 报告完整�
 
 - `duckdb-report-v*-macos-universal.zip`
 - `duckdb-report-v*-windows-amd64.zip`
+- `duckdb-report-v*-linux-amd64.tar.gz`
 
 详细环境、Quarto、R、Python、PDF 中文字体及资源目录说明见 [安装文档](docs/INSTALL.md)。
 
@@ -60,6 +62,7 @@ example             四表 Join → 汇总 → 透视 → Python/R 报告完整�
 - Quarto 1.8+
 - PDF 默认使用 Quarto 内置 Typst；只有自定义 LaTeX 格式时才需要 LaTeX 发行版
 - 示例提供 Python/Jupyter 与 R 两套 Quarto 报告
+- Linux 构建需要 GCC、GTK 3 与 WebKitGTK 4.1 开发包；Ubuntu 24.04/Debian 13 可安装 `build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev`
 
 当前机器上的检测结果：
 
@@ -76,6 +79,8 @@ make          # 类型检查、测试并构建当前平台应用
 make dev      # Wails 热重载开发
 make test     # Go 测试 + Vue TypeScript 构建
 make run      # 构建后打开应用
+make build-cli # 构建独立 CLI
+make build-linux  # 在 Linux 原生环境构建 x64 程序
 make build-windows # 在 Windows 原生环境构建 x64 程序
 ```
 
@@ -84,16 +89,58 @@ make build-windows # 在 Windows 原生环境构建 x64 程序
 ```text
 build/bin/duckdb_report.app
 build/bin/duckdb_report.exe
+build/bin/duckdb_report
+build/bin/duckdb-report-cli
+build/bin/duckdb-report-cli.exe
 ```
 
 也可以直接使用：
 
 ```bash
 wails build
+wails build -platform linux/amd64 -tags webkit2_41
 wails build -platform windows/amd64
 ```
 
-GitHub Actions 的 `v*` 标签发布会分别编译 macOS Universal（Apple Silicon + Intel）和 Windows x64，并上传 Release 资产。
+Linux 默认使用 `webkit2_41` 构建标签，并通过 `GOTOOLCHAIN=go1.26.0` 固定已验证的 Wails 2.13 工具链。需要兼容仍只提供 WebKitGTK 4.0 的旧发行版时，可使用 `make build-linux LINUX_WEBKIT_TAGS=webkit2_40`，并在目标发行版上验证对应开发包。
+
+GitHub Actions 的 `v*` 标签发布会分别编译 macOS Universal（Apple Silicon + Intel）、Windows x64 和 Linux x64，并上传 Release 资产。
+
+## CLI 自动化
+
+桌面二进制在带子命令时进入 CLI 模式；发布包同时提供独立的
+`duckdb-report-cli`，避免 Windows GUI 子系统影响控制台输出。CLI 与 GUI
+共用工作区、DuckDB、Quarto 和 Workflow 执行层。
+
+```bash
+duckdb-report-cli --workspace /path/to/workspace status --json
+duckdb-report-cli --workspace /path/to/workspace query \
+  --file sql/monthly_analysis.sql --limit 100 --json
+duckdb-report-cli --workspace /path/to/workspace doctor --json
+duckdb-report-cli --workspace /path/to/workspace workflow validate --json
+duckdb-report-cli --workspace /path/to/workspace workflow run \
+  --param start_date=2026-01-01 --param end_date=2026-12-31 --json
+duckdb-report-cli --workspace /path/to/workspace render \
+  --template templates/monthly_report.qmd --format pdf \
+  --query-file sql/monthly_result.sql --json
+```
+
+主要命令：
+
+- `status`：工作区、DuckDB、Quarto、R、Python、Jupyter、表和数据源状态。
+- `query`：执行文件或内联 SQL，支持 `.read`。
+- `doctor`：只读检查 Workflow、SQL、QMD、资源路径和运行时；`--explain`
+  还会验证报告查询能否在当前工作库中绑定执行计划。
+- `import`：导入 CSV、JSON、Parquet、Excel 或附加 DuckDB。
+- `render`：渲染 HTML/PDF，并支持 `query_*` 命名表格。
+- `workflow validate|run|import|export`：无界面验证、运行与迁移工作流。
+
+`--json` 将机器可读结果写到 stdout，诊断和步骤进度写到 stderr；退出码 `0`
+表示成功，`1` 表示运行错误，`2` 表示参数或命令使用错误。应用正在运行时不要用
+CLI 并发写同一个 `workspace.duckdb`。
+
+`doctor` 发现 error 时返回退出码 `1`；warning 默认不阻断，使用 `--strict`
+可将 warning 也视为失败。它不自动修改 SQL 或业务口径。
 
 ## 工作区
 
@@ -102,6 +149,7 @@ GitHub Actions 的 `v*` 标签发布会分别编译 macOS Universal（Apple Sili
 ```text
 macOS:   ~/Library/Application Support/duckdb_report/
 Windows: %APPDATA%\duckdb_report\
+Linux:   ${XDG_CONFIG_HOME:-~/.config}/duckdb_report/
 ```
 
 可用环境变量切换：
@@ -133,6 +181,8 @@ examples/monthly_sales/
 ```text
 ~/Library/Application Support/duckdb_report/settings.json
 ```
+
+Windows 对应 `%APPDATA%\duckdb_report\settings.json`，Linux 对应 `${XDG_CONFIG_HOME:-~/.config}/duckdb_report/settings.json`。
 
 设置页保存新的工作区目录后，会在下次启动时启用。现有工作区数据不会自动迁移，需要时自行复制目录。通过 `DUCKDB_REPORT_HOME` 启动时，环境变量优先于设置文件中的工作区。
 
@@ -237,9 +287,11 @@ query_products  → {{table_products}}
 ## 验证
 
 ```bash
-go test ./...
-cd frontend && npm run build
+gofmt -w .
+make test
 ```
+
+在 Linux 上直接调用 Go 工具链时需带桌面后端标签：`go test -tags webkit2_41 ./...`。
 
 当前测试覆盖：
 
@@ -256,10 +308,44 @@ cd frontend && npm run build
 
 ## Agent 协作
 
-Agent 可以直接生成或修改工作区中的：
+推荐配合 [DuckDB SQL Analytics Skill](https://github.com/alexwoo79/skills_plugins/tree/main/codex-skills/duckdb-sql-analytics)
+使用。Skill 负责 SQL 口径、时间序列方法、工作区发现和 Workflow/QMD 校验；桌面程序
+提供实际的 DuckDB、Quarto 和发布包执行能力。
+
+安装 Skill：
+
+```bash
+git clone https://github.com/alexwoo79/skills_plugins.git
+mkdir -p "${CODEX_HOME:-$HOME/.codex}/skills"
+cp -a skills_plugins/codex-skills/duckdb-sql-analytics \
+  "${CODEX_HOME:-$HOME/.codex}/skills/"
+```
+
+典型 Agent 工作流：
+
+```text
+$duckdb-sql-analytics
+  → status / doctor
+  → 修改 SQL、QMD、workflows/current.json
+  → workflow validate
+  → workflow run --json
+  → 用户按需在 GUI 审阅报告
+```
+
+对应命令：
+
+```bash
+duckdb-report-cli --workspace /path/to/workspace status --json
+duckdb-report-cli --workspace /path/to/workspace doctor --json
+duckdb-report-cli --workspace /path/to/workspace workflow validate --json
+duckdb-report-cli --workspace /path/to/workspace workflow run --json
+```
+
+Agent 也可以直接生成或修改工作区中的：
 
 - `workflows/*.json`
 - `sql/*.sql`
 - `templates/*.qmd`
 
-GUI 负责审核、执行和展示产物。运行前建议先检查 SQL/QMD 权限，因为该工作台刻意保留了本地分析工具的完整表达能力。
+CLI 适合自动化执行，GUI 适合人工审核、编辑和预览产物。运行前建议先检查
+SQL/QMD 权限，因为该工作台刻意保留了本地分析工具的完整表达能力。

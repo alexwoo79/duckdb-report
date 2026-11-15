@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"fmt"
 	"io/fs"
 	"os"
+	"os/signal"
 
+	"github.com/alexwoo79/duckdb-report/internal/cli"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
@@ -16,6 +19,19 @@ import (
 var assets embed.FS
 
 func main() {
+	if len(os.Args) > 1 {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		exitCode := cli.Execute(ctx, os.Args[1:], assets, os.Stdout, os.Stderr)
+		stop()
+		if exitCode != 0 {
+			os.Exit(exitCode)
+		}
+		return
+	}
+	runDesktop()
+}
+
+func runDesktop() {
 	frontend, err := fs.Sub(assets, "frontend/dist")
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "load frontend assets:", err)

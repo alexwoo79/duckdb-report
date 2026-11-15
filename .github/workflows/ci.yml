@@ -11,17 +11,25 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      GOTOOLCHAIN: go1.26.0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - name: Install Linux desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -33,6 +41,12 @@ jobs:
           go mod tidy
           git diff --exit-code -- go.mod go.sum
       - name: Vet
-        run: go vet ./...
+        run: go vet -tags webkit2_41 ./...
       - name: Test
-        run: go test -race -shuffle=on ./...
+        run: go test -race -shuffle=on -tags webkit2_41 ./...
+      - name: Install Wails
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
+      - name: Build CLI
+        run: go build -trimpath -ldflags="-s -w" -o build/bin/duckdb-report-cli ./cmd/duckdb-report-cli
+      - name: Build Linux application
+        run: wails build -platform linux/amd64 -tags webkit2_41 -trimpath -s

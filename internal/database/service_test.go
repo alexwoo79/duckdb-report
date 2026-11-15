@@ -40,6 +40,77 @@ func TestServiceQuery(t *testing.T) {
 	}
 }
 
+func TestServiceValidateSyntax(t *testing.T) {
+	t.Parallel()
+	service, err := Open(context.Background(), filepath.Join(t.TempDir(), "syntax.duckdb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := service.Close(); closeErr != nil {
+			t.Errorf("Close() error = %v", closeErr)
+		}
+	})
+
+	tests := []struct {
+		name    string
+		query   string
+		wantErr bool
+	}{
+		{name: "valid select", query: "SELECT 1 AS value"},
+		{name: "valid multi statement DDL", query: "CREATE TEMP TABLE syntax_test(value INTEGER); SELECT value FROM syntax_test;"},
+		{name: "invalid syntax", query: "SELECT FROM", wantErr: true},
+		{name: "empty sql", query: " ", wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := service.ValidateSyntax(context.Background(), test.query)
+			if (err != nil) != test.wantErr {
+				t.Fatalf("ValidateSyntax() error = %v, wantErr %v", err, test.wantErr)
+			}
+		})
+	}
+}
+
+func TestServiceTableNames(t *testing.T) {
+	t.Parallel()
+	service, err := Open(context.Background(), filepath.Join(t.TempDir(), "tables.duckdb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := service.Close(); closeErr != nil {
+			t.Errorf("Close() error = %v", closeErr)
+		}
+	})
+	names, err := service.TableNames(context.Background(), `SELECT * FROM schema1.orders, catalog3."schema.2"."customers"`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 2 {
+		t.Fatalf("TableNames() = %#v, want orders and customers", names)
+	}
+}
+
+func TestServiceExplain(t *testing.T) {
+	t.Parallel()
+	service, err := Open(context.Background(), filepath.Join(t.TempDir(), "explain.duckdb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := service.Close(); closeErr != nil {
+			t.Errorf("Close() error = %v", closeErr)
+		}
+	})
+	if err := service.Explain(context.Background(), "SELECT 1 AS value"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.Explain(context.Background(), "SELECT * FROM missing_table"); err == nil {
+		t.Fatal("expected missing table explain to fail")
+	}
+}
+
 func TestServiceImportExcel(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

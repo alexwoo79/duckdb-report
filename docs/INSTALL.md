@@ -6,6 +6,7 @@
 
 - macOS 13 或更高版本，Universal 包同时支持 Apple Silicon 与 Intel。
 - Windows 10/11 x64，需要 Microsoft Edge WebView2 Runtime。
+- Linux x64，需要 GTK 3 与 WebKitGTK 4.1。发布包面向 Ubuntu 24.04、Debian 13、Fedora 40+、Arch Linux 等同代或更新的 glibc 发行版。
 - 应用内置 DuckDB 2.0 和前端资源，不要求用户单独安装 DuckDB 或 Node.js。
 
 ## 2. 从 Release 安装
@@ -14,6 +15,7 @@
 
 - `duckdb-report-v0.1.4-macos-universal.zip`
 - `duckdb-report-v0.1.4-windows-amd64.zip`
+- `duckdb-report-v*-linux-amd64.tar.gz`
 
 macOS：
 
@@ -26,11 +28,34 @@ Windows：
 2. Windows 10/11 通常已包含 WebView2。若启动提示缺少 WebView2，请安装 Microsoft Edge WebView2 Evergreen Runtime。
 3. 当前发布包未做代码签名，SmartScreen 可能要求选择“更多信息”后确认运行。
 
+Linux：
+
+1. 解压 `duckdb-report-*-linux-amd64.tar.gz`。
+2. 确认已安装 GTK 3 与 WebKitGTK 4.1：
+
+   ```bash
+   # Ubuntu 24.04 / Debian 13
+   sudo apt install libgtk-3-0t64 libwebkit2gtk-4.1-0
+
+   # Fedora
+   sudo dnf install gtk3 webkit2gtk4.1
+
+   # Arch Linux
+   sudo pacman -S gtk3 webkit2gtk-4.1
+   ```
+
+3. 运行解压后的可执行文件：
+
+   ```bash
+   ./duckdb_report
+   ```
+
 应用首次启动后会在以下目录创建工作区：
 
 ```text
 macOS:   ~/Library/Application Support/duckdb_report
 Windows: %APPDATA%\duckdb_report
+Linux:   ${XDG_CONFIG_HOME:-~/.config}/duckdb_report
 ```
 
 可以通过设置页切换工作区，或使用环境变量临时覆盖：
@@ -64,6 +89,18 @@ python3 -m jupyter --version
 
 Windows 可将 `python3` 替换为 `python` 或 `py`。
 
+Linux 的系统 Python 可能被发行版标记为 externally managed。使用 `uv` 创建应用专用环境时：
+
+```bash
+uv venv --python /usr/bin/python3 ~/.local/share/duckdb-report/jupyter
+uv pip install --python ~/.local/share/duckdb-report/jupyter/bin/python \
+  jupyterlab ipykernel duckdb pandas matplotlib
+~/.local/share/duckdb-report/jupyter/bin/python -m ipykernel install \
+  --user --name duckdb-report --display-name "Python (DuckDB Report Studio)"
+```
+
+应用会自动发现这个 Linux Jupyter 环境，无需修改系统 Python。
+
 ### R 报告
 
 需要 R 4.2 或更高版本。启动 R 后安装依赖：
@@ -90,6 +127,13 @@ Quarto 使用内置 Typst 生成 PDF，不强制安装 LaTeX。PDF 可使用与�
 - Linux：Noto Sans CJK SC
 
 应用会把当前系统对应的字体名注入报告模板。若系统缺少建议字体，请安装 `Noto Sans CJK SC` 或设置工作流运行参数 `report_font` 覆盖默认字体。
+
+只有自定义 XeLaTeX/LaTeX 模板才需要 TeX 发行版。Linux 可安装用户级 TinyTeX 与中文排版包：
+
+```bash
+Rscript -e 'tinytex::install_tinytex(add_path = TRUE)'
+tlmgr install collection-latexrecommended xecjk
+```
 
 ## 4. 内置资源
 
@@ -120,6 +164,14 @@ workspace.duckdb      当前工作库
 - Node.js 20+
 - Wails CLI 2.13
 - 对应平台 C 编译器
+
+Linux 还需要 GTK 3 与 WebKitGTK 4.1 开发包。Ubuntu 24.04/Debian 13：
+
+```bash
+sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+```
+
+Fedora：`sudo dnf install gcc pkg-config gtk3-devel webkit2gtk4.1-devel`。Arch Linux：`sudo pacman -S base-devel pkgconf gtk3 webkit2gtk-4.1`。
 
 安装 Wails：
 
@@ -160,6 +212,46 @@ Windows 输出：
 build\bin\duckdb_report.exe
 ```
 
+Linux 原生构建：
+
+```bash
+make build-linux
+```
+
+Linux 输出：
+
+```text
+build/bin/duckdb_report
+build/bin/duckdb-report-cli
+```
+
+也可以直接运行 `GOTOOLCHAIN=go1.26.0 wails build -platform linux/amd64 -tags webkit2_41`。`make` 与 GitHub Actions 默认使用 WebKitGTK 4.1，并固定 Wails 2.13 已验证的 Go 1.26 工具链；若目标系统只有 WebKitGTK 4.0，可在 Linux 原生环境使用 `make build-linux LINUX_WEBKIT_TAGS=webkit2_40`。
+
+构建独立 CLI：
+
+```bash
+make build-cli
+```
+
+发布包中的 CLI 可直接用于 Agent、脚本和定时任务：
+
+```bash
+duckdb-report-cli --workspace /path/to/workspace status --json
+duckdb-report-cli --workspace /path/to/workspace doctor --json
+duckdb-report-cli --workspace /path/to/workspace workflow run --json
+```
+
+CLI 与桌面应用不能同时写入同一个 `workspace.duckdb`。运行 CLI 前应关闭对应窗口。
+
+`doctor` 会检查工作流引用、Step 顺序、参数占位符、SQL 语法、QMD 表格映射、
+报告资源与运行时依赖。加入 `--explain` 会额外检查查询计划绑定；`--strict`
+会把 warning 作为失败返回。
+
+Agent 场景建议配合
+[DuckDB SQL Analytics Skill](https://github.com/alexwoo79/skills_plugins/tree/main/codex-skills/duckdb-sql-analytics)。
+Skill 的入口、SQL 模式和 CLI 调用协议说明位于该仓库的 `SKILL.md` 与
+`references/duckdb-report-integration.md`。
+
 从 macOS 交叉编译 Windows 需要 MinGW-w64。仓库的 GitHub Actions Release 流程使用原生 Windows Runner 构建，可避免本地 CGO 交叉编译问题。
 
 ## 6. 常见问题
@@ -185,6 +277,10 @@ build\bin\duckdb_report.exe
 ### Windows 无法启动
 
 先确认 WebView2 Runtime 已安装。若界面出现 DuckDB 文件锁错误，请关闭重复启动的应用实例后再打开。
+
+### Linux 无法启动或缺少 WebKitGTK
+
+发布包动态依赖 GTK 3 与 WebKitGTK 4.1。可根据发行版安装 `libgtk-3-0t64`、`libwebkit2gtk-4.1-0`（Ubuntu/Debian），或 `gtk3`、`webkit2gtk4.1`（Fedora/Arch）。没有可用图形会话的服务器环境无法启动桌面界面。旧发行版如果只提供 WebKitGTK 4.0，需要自行从源码使用 `webkit2_40` 标签构建。
 
 ### Quarto 能执行但应用显示未找到
 

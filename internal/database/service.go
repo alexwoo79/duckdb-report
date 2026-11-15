@@ -17,7 +17,7 @@ import (
 	"github.com/alexwoo79/duckdb-report/internal/model"
 	"github.com/xuri/excelize/v2"
 
-	_ "github.com/duckdb/duckdb-go/v2"
+	duckdb "github.com/duckdb/duckdb-go/v2"
 )
 
 const maxScriptDepth = 24
@@ -171,6 +171,65 @@ func (s *Service) Query(ctx context.Context, query string, limit int) (model.Que
 	result.RowCount = len(result.Rows)
 	result.ElapsedMS = time.Since(started).Milliseconds()
 	return result, nil
+}
+
+// ValidateSyntax parses SQL without executing statements.
+func (s *Service) ValidateSyntax(ctx context.Context, query string) error {
+	if strings.TrimSpace(query) == "" {
+		return errors.New("sql is empty")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, err := s.tableNamesLocked(ctx, query)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// TableNames parses SQL and extracts referenced table names without executing it.
+func (s *Service) TableNames(ctx context.Context, query string) ([]string, error) {
+	if strings.TrimSpace(query) == "" {
+		return nil, errors.New("sql is empty")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.tableNamesLocked(ctx, query)
+}
+
+func (s *Service) tableNamesLocked(ctx context.Context, query string) ([]string, error) {
+	connection, err := s.db.Conn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("acquire duckdb connection: %w", err)
+	}
+	defer connection.Close()
+	names, err := duckdb.GetTableNames(connection, query, true)
+	if err != nil {
+		return nil, fmt.Errorf("parse sql: %w", err)
+	}
+	return names, nil
+}
+
+// Explain validates query binding and returns a plan without executing the query.
+func (s *Service) Explain(ctx context.Context, query string) error {
+	if strings.TrimSpace(query) == "" {
+		return errors.New("sql is empty")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	rows, err := s.db.QueryContext(ctx, "EXPLAIN "+query)
+	if err != nil {
+		return fmt.Errorf("explain sql: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("iterate explain plan: %w", err)
+	}
+	return nil
 }
 
 func ExpandScript(script, baseDir string) (string, error) {

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=DuckDB Report Studio
+Comment=Local DuckDB SQL and Quarto report workbench
+Exec=duckdb_report
+TryExec=duckdb_report
+Icon=duckdb-report
+Terminal=false
+Categories=Development;Database;
+Keywords=DuckDB;SQL;Quarto;Report;
+StartupNotify=true
+StartupWMClass=duckdb_report

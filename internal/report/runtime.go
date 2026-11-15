@@ -63,7 +63,9 @@ func runtimePathEntries() []string {
 		filepath.Join(home, ".local", "bin"),
 		filepath.Join(home, ".pyenv", "shims"),
 		filepath.Join(home, "miniconda3", "bin"),
+		filepath.Join(home, "miniforge3", "bin"),
 		filepath.Join(home, "anaconda3", "bin"),
+		filepath.Join(home, "mambaforge", "bin"),
 	}
 	switch runtime.GOOS {
 	case "darwin":
@@ -75,6 +77,14 @@ func runtimePathEntries() []string {
 			filepath.Join(home, "Library", "Python", "3.*", "bin"),
 			filepath.Join(home, "Library", "Frameworks", "Python.framework", "Versions", "*", "bin"),
 			"/Library/Frameworks/Python.framework/Versions/*/bin",
+		)...)
+	case "linux":
+		candidates = append(candidates,
+			linuxRuntimePathCandidates(home, os.Getenv("XDG_DATA_HOME"))...,
+		)
+		candidates = append(candidates, globDirectories(
+			"/opt/R/*/bin",
+			"/opt/quarto-*/bin",
 		)...)
 	case "windows":
 		localAppData := os.Getenv("LOCALAPPDATA")
@@ -103,6 +113,23 @@ func runtimePathEntries() []string {
 		}
 	}
 	return existing
+}
+
+func linuxRuntimePathCandidates(home, xdgDataHome string) []string {
+	dataHome := strings.TrimSpace(xdgDataHome)
+	if dataHome == "" {
+		dataHome = filepath.Join(home, ".local", "share")
+	}
+	return []string{
+		"/opt/quarto/bin",
+		filepath.Join(home, "opt", "quarto", "bin"),
+		filepath.Join(home, ".local", "opt", "quarto", "bin"),
+		filepath.Join(dataHome, "quarto", "bin"),
+		filepath.Join(dataHome, "duckdb-report", "jupyter", "bin"),
+		"/usr/lib/R/bin",
+		"/usr/lib64/R/bin",
+		filepath.Join(home, ".local", "share", "rstudio", "bin", "quarto", "bin"),
+	}
 }
 
 func globDirectories(patterns ...string) []string {

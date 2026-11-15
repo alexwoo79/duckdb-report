@@ -21,6 +21,7 @@
 
 - `main.go`: Wails application bootstrap.
 - `app.go`: desktop API boundary and workspace lifecycle.
+- `internal/cli`: headless command tree shared with the desktop backend.
 - `internal/runner`: workflow execution.
 - `internal/database`: DuckDB access and import.
 - `internal/report`: Quarto rendering and report table generation.
@@ -32,3 +33,9 @@
 - Python QMD reports require Jupyter, pandas, matplotlib, and duckdb.
 - R QMD reports require DBI, duckdb, dplyr, ggplot2, knitr, scales, and rmarkdown.
 - PDF reports use Quarto Typst output.
+- `duckdb-report-cli` exposes status, doctor, query, import, render, and workflow commands
+  with JSON output for agents and automation.
+- `doctor` audits workflow wiring, SQL syntax, QMD placeholders/assets, and runtime
+  dependencies without modifying files.
+- Companion agent skill:
+  https://github.com/alexwoo79/skills_plugins/tree/main/codex-skills/duckdb-sql-analytics

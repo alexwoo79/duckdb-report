@@ -8,6 +8,8 @@ The structure is:
 * darwin - macOS specific files
 * windows - Windows specific files
 
+Linux uses Wails' default packaging and does not require a platform-specific build directory.
+
 ## Mac
 
 The `darwin` directory holds files specific to Mac builds.
@@ -33,3 +35,9 @@ build with `wails build`.
 - `info.json` - Application details used for Windows builds. The data here will be used by the Windows installer,
   as well as the application itself (right click the exe -> properties -> details)
 - `wails.exe.manifest` - The main application manifest file.
+
+## Linux
+
+`wails build -platform linux/amd64 -tags webkit2_41` produces `build/bin/duckdb_report`.
+Use `-tags webkit2_40` only when building for a distribution that provides WebKitGTK 4.0
+instead of WebKitGTK 4.1.
