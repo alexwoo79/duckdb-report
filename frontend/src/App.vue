@@ -1634,7 +1634,7 @@ onMounted(async () => {
                   <input v-model="settingsDraft.displayName" maxlength="80" placeholder="DuckDB Report Studio" />
                 </label>
                 <div class="settings-readonly-grid">
-                  <div><span>当前版本</span><code>0.1.0</code></div>
+                  <div><span>当前版本</span><code>0.1.1</code></div>
                   <div><span>配置文件</span><code>{{ state?.settings.settingsPath }}</code></div>
                 </div>
               </section>

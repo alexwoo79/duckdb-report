@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.1 - 2026-11-15
+
+### Fixed
+
+- Publish a macOS Universal application for both Apple Silicon and Intel Macs.
+- Select a Windows-compatible Chinese report font and normalize report database paths for Windows.
+
 ## v0.1.0 - 2026-11-15
 
 ### Added

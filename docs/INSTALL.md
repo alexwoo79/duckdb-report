@@ -4,7 +4,7 @@
 
 ## 1. 支持平台
 
-- macOS 13 或更高版本，Apple Silicon。
+- macOS 13 或更高版本，Universal 包同时支持 Apple Silicon 与 Intel。
 - Windows 10/11 x64，需要 Microsoft Edge WebView2 Runtime。
 - 应用内置 DuckDB 2.0 和前端资源，不要求用户单独安装 DuckDB 或 Node.js。
 
@@ -12,8 +12,8 @@
 
 从 [Releases](https://github.com/alexwoo79/duckdb-report/releases) 下载对应压缩包：
 
-- `duckdb-report-v0.1.0-macos-arm64.zip`
-- `duckdb-report-v0.1.0-windows-amd64.zip`
+- `duckdb-report-v0.1.1-macos-universal.zip`
+- `duckdb-report-v0.1.1-windows-amd64.zip`
 
 macOS：
 
@@ -140,6 +140,12 @@ macOS 输出：
 
 ```text
 build/bin/duckdb_report.app
+```
+
+构建 macOS Universal 包：
+
+```bash
+wails build -platform darwin/universal
 ```
 
 Windows 原生构建：

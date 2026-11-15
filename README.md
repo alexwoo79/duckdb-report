@@ -47,7 +47,7 @@ example             四表 Join → 汇总 → 透视 → Python/R 报告完整�
 
 普通用户请从 [GitHub Releases](https://github.com/alexwoo79/duckdb-report/releases) 下载：
 
-- `duckdb-report-v*-macos-arm64.zip`
+- `duckdb-report-v*-macos-universal.zip`
 - `duckdb-report-v*-windows-amd64.zip`
 
 详细环境、Quarto、R、Python、PDF 中文字体及资源目录说明见 [安装文档](docs/INSTALL.md)。
@@ -93,7 +93,7 @@ wails build
 wails build -platform windows/amd64
 ```
 
-GitHub Actions 的 `v*` 标签发布会分别在 macOS ARM64 和 Windows x64 原生 Runner 上编译并上传 Release 资产。
+GitHub Actions 的 `v*` 标签发布会分别编译 macOS Universal（Apple Silicon + Intel）和 Windows x64，并上传 Release 资产。
 
 ## 工作区
 
