@@ -450,6 +450,125 @@ func (s *Service) ListTables(ctx context.Context) ([]model.TableRef, error) {
 	return result, nil
 }
 
+func (s *Service) ListDatabases(ctx context.Context) ([]model.DatabaseRef, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var currentDatabase string
+	if err := s.db.QueryRowContext(ctx, "SELECT current_database()").Scan(&currentDatabase); err != nil {
+		return nil, fmt.Errorf("read current database: %w", err)
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT
+			database_name,
+			COALESCE(path, ''),
+			COALESCE(type, ''),
+			COALESCE(readonly, false)
+		FROM duckdb_databases()
+		WHERE database_name NOT IN ('system', 'temp')
+		ORDER BY database_name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list duckdb databases: %w", err)
+	}
+	defer rows.Close()
+
+	result := []model.DatabaseRef{}
+	for rows.Next() {
+		var database model.DatabaseRef
+		if err := rows.Scan(
+			&database.Name,
+			&database.Path,
+			&database.Type,
+			&database.ReadOnly,
+		); err != nil {
+			return nil, fmt.Errorf("scan duckdb database: %w", err)
+		}
+		database.IsCurrent = database.Name == currentDatabase
+		result = append(result, database)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate duckdb databases: %w", err)
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].IsCurrent != result[j].IsCurrent {
+			return result[i].IsCurrent
+		}
+		return result[i].Name < result[j].Name
+	})
+	return result, nil
+}
+
+func (s *Service) SQLCompletions(ctx context.Context) (model.SQLCompletionCatalog, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT
+			c.table_catalog,
+			c.table_schema,
+			c.table_name,
+			COALESCE(t.table_type, ''),
+			c.column_name,
+			COALESCE(c.data_type, '')
+		FROM information_schema.columns c
+		LEFT JOIN information_schema.tables t
+			ON t.table_catalog = c.table_catalog
+			AND t.table_schema = c.table_schema
+			AND t.table_name = c.table_name
+		WHERE c.table_schema NOT IN ('information_schema', 'pg_catalog')
+		ORDER BY c.table_catalog, c.table_schema, c.table_name, c.ordinal_position
+	`)
+	if err != nil {
+		return model.SQLCompletionCatalog{}, fmt.Errorf("list sql completion columns: %w", err)
+	}
+	defer rows.Close()
+
+	catalog := model.SQLCompletionCatalog{Tables: []model.SQLCompletionTable{}}
+	tableIndexes := make(map[string]int)
+	for rows.Next() {
+		var (
+			tableCatalog string
+			tableSchema  string
+			tableName    string
+			tableType    string
+			columnName   string
+			columnType   string
+		)
+		if err := rows.Scan(
+			&tableCatalog,
+			&tableSchema,
+			&tableName,
+			&tableType,
+			&columnName,
+			&columnType,
+		); err != nil {
+			return model.SQLCompletionCatalog{}, fmt.Errorf("scan sql completion column: %w", err)
+		}
+		key := tableCatalog + "\x00" + tableSchema + "\x00" + tableName
+		tableIndex, exists := tableIndexes[key]
+		if !exists {
+			tableIndex = len(catalog.Tables)
+			tableIndexes[key] = tableIndex
+			catalog.Tables = append(catalog.Tables, model.SQLCompletionTable{
+				Catalog: tableCatalog,
+				Schema:  tableSchema,
+				Name:    tableName,
+				Type:    tableType,
+				Columns: []model.ColumnRef{},
+			})
+		}
+		catalog.Tables[tableIndex].Columns = append(
+			catalog.Tables[tableIndex].Columns,
+			model.ColumnRef{Name: columnName, Type: columnType},
+		)
+	}
+	if err := rows.Err(); err != nil {
+		return model.SQLCompletionCatalog{}, fmt.Errorf("iterate sql completion columns: %w", err)
+	}
+	return catalog, nil
+}
+
 func (s *Service) importExcelLocked(ctx context.Context, path, table, sheet string) error {
 	workbook, err := excelize.OpenFile(path)
 	if err != nil {

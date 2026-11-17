@@ -2,8 +2,15 @@
 
 ## Unreleased
 
+## v0.1.5 - 2026-11-17
+
 ### Added
 
+- Add a collapsible database/schema/table asset tree with attached-database status, search, and detach actions.
+- Add a CodeMirror SQL editor with Tab-accepted DuckDB keyword, function, table, and column completion plus common keyboard shortcuts.
+- Add a Quarto-aware QMD editor with YAML and Quarto completion plus new-document, save-as, and rendering shortcuts.
+- Add editor font-size shortcuts and a persistent 11–17px application UI font-size setting.
+- Add Parquet export for query results alongside UTF-8 BOM CSV export.
 - Add Linux x64 desktop builds, CI verification, and release packaging for WebKitGTK 4.1.
 - Discover common Linux Quarto, R, Miniforge, Mambaforge, and app-specific Jupyter installation paths for GUI-launched reports.
 - Add `duckdb-report-cli` with JSON commands for workspace status, SQL, imports, report rendering, and workflow validation/execution/import/export.

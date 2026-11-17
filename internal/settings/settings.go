@@ -13,6 +13,12 @@ import (
 
 const fileName = "settings.json"
 
+const (
+	defaultUIFontSize = 13
+	minUIFontSize     = 11
+	maxUIFontSize     = 17
+)
+
 type Store struct {
 	Path             string
 	DefaultWorkspace string
@@ -31,6 +37,7 @@ func (s *Store) Load() (model.AppSettings, error) {
 		return model.AppSettings{
 			DisplayName: "DuckDB Report Studio",
 			Workspace:   s.DefaultWorkspace,
+			UIFontSize:  defaultUIFontSize,
 		}, nil
 	}
 	if err != nil {
@@ -46,6 +53,7 @@ func (s *Store) Load() (model.AppSettings, error) {
 	if strings.TrimSpace(value.Workspace) == "" {
 		value.Workspace = s.DefaultWorkspace
 	}
+	value.UIFontSize = normalizeUIFontSize(value.UIFontSize)
 	return value, nil
 }
 
@@ -61,6 +69,7 @@ func (s *Store) Save(value model.AppSettings) error {
 	if value.Workspace == "" {
 		return errors.New("workspace path is empty")
 	}
+	value.UIFontSize = normalizeUIFontSize(value.UIFontSize)
 	absolute, err := filepath.Abs(value.Workspace)
 	if err != nil {
 		return fmt.Errorf("resolve workspace path: %w", err)
@@ -84,4 +93,17 @@ func (s *Store) Save(value model.AppSettings) error {
 		return fmt.Errorf("replace settings: %w", err)
 	}
 	return nil
+}
+
+func normalizeUIFontSize(value int) int {
+	if value == 0 {
+		return defaultUIFontSize
+	}
+	if value < minUIFontSize {
+		return minUIFontSize
+	}
+	if value > maxUIFontSize {
+		return maxUIFontSize
+	}
+	return value
 }

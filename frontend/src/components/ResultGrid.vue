@@ -12,7 +12,7 @@ const props = defineProps<{
 const page = ref(1);
 const pageSize = 50;
 const expanded = ref(false);
-const exporting = ref(false);
+const exportBusy = ref<"csv" | "parquet" | null>(null);
 const exportNote = ref("");
 const searchQuery = ref("");
 const sortColumn = ref<number | null>(null);
@@ -104,22 +104,27 @@ function toggleSort(column: number) {
   }
 }
 
-async function exportCSV() {
-  if (!props.result || exporting.value) return;
-  exporting.value = true;
+async function exportResult(format: "csv" | "parquet") {
+  if (!props.result || exportBusy.value) return;
+  exportBusy.value = format;
   exportNote.value = "";
   try {
-    const path = await backend().ExportQueryCSV({
+    const client = backend();
+    const result = {
       ...props.result,
       rows: sortedRows.value.map(({ row }) => row),
       rowCount: sortedRows.value.length,
       truncated: false,
-    });
+    };
+    const path =
+      format === "csv"
+        ? await client.ExportQueryCSV(result)
+        : await client.ExportQueryParquet(result);
     if (path) exportNote.value = `已导出：${path}`;
   } catch (error) {
     exportNote.value = errorMessage(error);
   } finally {
-    exporting.value = false;
+    exportBusy.value = null;
   }
 }
 </script>
@@ -158,9 +163,21 @@ async function exportCSV() {
           <span>{{ result.columns.length }} 列</span>
           <span v-if="exportNote" class="export-note">{{ exportNote }}</span>
           <div class="result-actions">
-            <button class="text-button" :disabled="exporting" @click="exportCSV">
+            <button
+              class="text-button"
+              :disabled="exportBusy !== null"
+              @click="exportResult('csv')"
+            >
               <AppIcon name="file" :size="13" />
-              {{ exporting ? "导出中…" : "导出 CSV" }}
+              {{ exportBusy === "csv" ? "导出 CSV 中…" : "导出 CSV" }}
+            </button>
+            <button
+              class="text-button"
+              :disabled="exportBusy !== null"
+              @click="exportResult('parquet')"
+            >
+              <AppIcon name="file" :size="13" />
+              {{ exportBusy === "parquet" ? "导出 Parquet 中…" : "导出 Parquet" }}
             </button>
             <button class="text-button" @click="expanded = !expanded">
               <AppIcon name="external" :size="13" />

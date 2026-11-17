@@ -57,6 +57,31 @@ type TableRef struct {
 	Type    string `json:"type"`
 }
 
+type DatabaseRef struct {
+	Name      string `json:"name"`
+	Path      string `json:"path"`
+	Type      string `json:"type"`
+	ReadOnly  bool   `json:"readOnly"`
+	IsCurrent bool   `json:"isCurrent"`
+}
+
+type ColumnRef struct {
+	Name string `json:"name"`
+	Type string `json:"type"`
+}
+
+type SQLCompletionTable struct {
+	Catalog string      `json:"catalog"`
+	Schema  string      `json:"schema"`
+	Name    string      `json:"name"`
+	Type    string      `json:"type"`
+	Columns []ColumnRef `json:"columns"`
+}
+
+type SQLCompletionCatalog struct {
+	Tables []SQLCompletionTable `json:"tables"`
+}
+
 type Environment struct {
 	DuckDBVersion    string `json:"duckdbVersion"`
 	QuartoPath       string `json:"quartoPath"`
@@ -72,6 +97,7 @@ type Environment struct {
 type AppSettings struct {
 	DisplayName string `json:"displayName"`
 	Workspace   string `json:"workspace"`
+	UIFontSize  int    `json:"uiFontSize"`
 }
 
 type SettingsInfo struct {
@@ -82,20 +108,22 @@ type SettingsInfo struct {
 	DefaultWorkspace  string `json:"defaultWorkspace"`
 	SettingsPath      string `json:"settingsPath"`
 	WorkspaceOverride bool   `json:"workspaceOverride"`
+	UIFontSize        int    `json:"uiFontSize"`
 }
 
 type Bootstrap struct {
-	Workspace   string       `json:"workspace"`
-	Database    string       `json:"database"`
-	Workflow    Workflow     `json:"workflow"`
-	SQLFiles    []FileRef    `json:"sqlFiles"`
-	Templates   []FileRef    `json:"templates"`
-	Workflows   []FileRef    `json:"workflows"`
-	Tables      []TableRef   `json:"tables"`
-	Sources     []Source     `json:"sources"`
-	Runs        []RunInfo    `json:"runs"`
-	Environment Environment  `json:"environment"`
-	Settings    SettingsInfo `json:"settings"`
+	Workspace   string        `json:"workspace"`
+	Database    string        `json:"database"`
+	Workflow    Workflow      `json:"workflow"`
+	SQLFiles    []FileRef     `json:"sqlFiles"`
+	Templates   []FileRef     `json:"templates"`
+	Workflows   []FileRef     `json:"workflows"`
+	Databases   []DatabaseRef `json:"databases"`
+	Tables      []TableRef    `json:"tables"`
+	Sources     []Source      `json:"sources"`
+	Runs        []RunInfo     `json:"runs"`
+	Environment Environment   `json:"environment"`
+	Settings    SettingsInfo  `json:"settings"`
 }
 
 type QueryResult struct {
@@ -122,8 +150,9 @@ type ImportResult struct {
 }
 
 type DataCatalog struct {
-	Tables  []TableRef `json:"tables"`
-	Sources []Source   `json:"sources"`
+	Databases []DatabaseRef `json:"databases"`
+	Tables    []TableRef    `json:"tables"`
+	Sources   []Source      `json:"sources"`
 }
 
 type WorkflowRequest struct {

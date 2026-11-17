@@ -140,6 +140,10 @@ func (a *App) Bootstrap() (model.Bootstrap, error) {
 	if err != nil {
 		return model.Bootstrap{}, err
 	}
+	databases, err := a.database.ListDatabases(a.operationContext())
+	if err != nil {
+		return model.Bootstrap{}, err
+	}
 	tables, err := a.database.ListTables(a.operationContext())
 	if err != nil {
 		return model.Bootstrap{}, err
@@ -155,6 +159,9 @@ func (a *App) Bootstrap() (model.Bootstrap, error) {
 	if tables == nil {
 		tables = []model.TableRef{}
 	}
+	if databases == nil {
+		databases = []model.DatabaseRef{}
+	}
 	if sources == nil {
 		sources = []model.Source{}
 	}
@@ -168,12 +175,24 @@ func (a *App) Bootstrap() (model.Bootstrap, error) {
 		SQLFiles:    sqlFiles,
 		Templates:   templates,
 		Workflows:   workflows,
+		Databases:   databases,
 		Tables:      tables,
 		Sources:     sources,
 		Runs:        runs,
 		Environment: a.renderer.Environments(a.operationContext()),
 		Settings:    a.settingsInfoLocked(),
 	}, nil
+}
+
+func (a *App) LoadSQLCompletions() (model.SQLCompletionCatalog, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.initErr != nil {
+		return model.SQLCompletionCatalog{}, a.initErr
+	}
+	ctx, cancel := context.WithTimeout(a.operationContext(), 30*time.Second)
+	defer cancel()
+	return a.database.SQLCompletions(ctx)
 }
 
 func (a *App) displayName() string {
@@ -400,32 +419,67 @@ func (a *App) SaveText(path, content string) (model.FileContent, error) {
 	return a.store.WriteText(path, content)
 }
 
+type workspaceTextFormat struct {
+	extension   string
+	title       string
+	prefix      string
+	displayName string
+}
+
 func (a *App) SaveSQLAs(content string) (model.FileContent, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.initErr != nil {
 		return model.FileContent{}, a.initErr
 	}
+	return a.saveWorkspaceTextAs(content, workspaceTextFormat{
+		extension:   ".sql",
+		title:       "新建或另存 SQL 文件",
+		prefix:      "query-",
+		displayName: "SQL 文件",
+	}, a.store.SQL)
+}
+
+func (a *App) SaveQMDAs(content string) (model.FileContent, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.initErr != nil {
+		return model.FileContent{}, a.initErr
+	}
+	return a.saveWorkspaceTextAs(content, workspaceTextFormat{
+		extension:   ".qmd",
+		title:       "新建或另存 QMD 文件",
+		prefix:      "report-",
+		displayName: "Quarto QMD 文件",
+	}, a.store.Templates)
+}
+
+func (a *App) saveWorkspaceTextAs(
+	content string,
+	format workspaceTextFormat,
+	defaultDirectory string,
+) (model.FileContent, error) {
+	kind := strings.ToUpper(strings.TrimPrefix(format.extension, "."))
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:            "新建或另存 SQL 文件",
-		DefaultDirectory: a.store.SQL,
-		DefaultFilename:  "query-" + time.Now().Format("20060102-150405") + ".sql",
+		Title:            format.title,
+		DefaultDirectory: defaultDirectory,
+		DefaultFilename:  format.prefix + time.Now().Format("20060102-150405") + format.extension,
 		Filters: []runtime.FileFilter{
-			{DisplayName: "SQL 文件", Pattern: "*.sql"},
+			{DisplayName: format.displayName, Pattern: "*" + format.extension},
 		},
 	})
 	if err != nil {
-		return model.FileContent{}, fmt.Errorf("choose sql destination: %w", err)
+		return model.FileContent{}, fmt.Errorf("choose %s destination: %w", kind, err)
 	}
 	if path == "" {
 		return model.FileContent{}, nil
 	}
-	if !strings.HasSuffix(strings.ToLower(path), ".sql") {
-		path += ".sql"
+	if !strings.HasSuffix(strings.ToLower(path), format.extension) {
+		path += format.extension
 	}
 	relative, err := filepath.Rel(a.store.Root, path)
 	if err != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-		return model.FileContent{}, errors.New("SQL 文件必须保存在当前工作区内")
+		return model.FileContent{}, fmt.Errorf("%s 文件必须保存在当前工作区内", kind)
 	}
 	return a.store.WriteText(filepath.ToSlash(relative), content)
 }
@@ -536,36 +590,63 @@ func (a *App) RenderReport(request model.RenderRequest) (model.RenderResult, err
 	return a.renderer.Render(ctx, request)
 }
 
+type queryExportFormat struct {
+	extension   string
+	title       string
+	displayName string
+	write       func(io.Writer, model.QueryResult) error
+}
+
 func (a *App) ExportQueryCSV(result model.QueryResult) (string, error) {
+	return a.exportQueryResult(result, queryExportFormat{
+		extension:   ".csv",
+		title:       "导出查询结果为 CSV",
+		displayName: "CSV 文件",
+		write:       database.WriteQueryCSV,
+	})
+}
+
+func (a *App) ExportQueryParquet(result model.QueryResult) (string, error) {
+	return a.exportQueryResult(result, queryExportFormat{
+		extension:   ".parquet",
+		title:       "导出查询结果为 Parquet",
+		displayName: "Parquet 文件",
+		write:       database.WriteQueryParquet,
+	})
+}
+
+func (a *App) exportQueryResult(result model.QueryResult, format queryExportFormat) (string, error) {
 	if len(result.Columns) == 0 {
 		return "", errors.New("query result has no columns to export")
 	}
 	path, err := runtime.SaveFileDialog(a.ctx, runtime.SaveDialogOptions{
-		Title:           "导出查询结果为 CSV",
-		DefaultFilename: "query-result-" + time.Now().Format("20060102-150405") + ".csv",
+		Title:           format.title,
+		DefaultFilename: "query-result-" + time.Now().Format("20060102-150405") + format.extension,
 		Filters: []runtime.FileFilter{
-			{DisplayName: "CSV 文件", Pattern: "*.csv"},
+			{DisplayName: format.displayName, Pattern: "*" + format.extension},
 		},
 	})
 	if err != nil {
-		return "", fmt.Errorf("choose csv output: %w", err)
+		return "", fmt.Errorf("choose %s output: %w", strings.TrimPrefix(format.extension, "."), err)
 	}
 	if path == "" {
 		return "", nil
 	}
-	if !strings.HasSuffix(strings.ToLower(path), ".csv") {
-		path += ".csv"
+	if !strings.HasSuffix(strings.ToLower(path), format.extension) {
+		path += format.extension
 	}
 	file, err := os.Create(path)
 	if err != nil {
-		return "", fmt.Errorf("create csv output: %w", err)
+		return "", fmt.Errorf("create %s output: %w", strings.TrimPrefix(format.extension, "."), err)
 	}
-	if err := database.WriteQueryCSV(file, result); err != nil {
-		file.Close()
-		return "", err
-	}
-	if err := file.Close(); err != nil {
-		return "", fmt.Errorf("close csv output: %w", err)
+	writeErr := format.write(file, result)
+	closeErr := file.Close()
+	if writeErr != nil || closeErr != nil {
+		return "", fmt.Errorf(
+			"write %s output: %w",
+			strings.TrimPrefix(format.extension, "."),
+			errors.Join(writeErr, closeErr),
+		)
 	}
 	return path, nil
 }
@@ -778,12 +859,19 @@ func (a *App) ValidateWorkflow(value model.Workflow) error {
 }
 
 func (a *App) dataCatalogLocked() (model.DataCatalog, error) {
+	databases, err := a.database.ListDatabases(a.operationContext())
+	if err != nil {
+		return model.DataCatalog{}, err
+	}
 	tables, err := a.database.ListTables(a.operationContext())
 	if err != nil {
 		return model.DataCatalog{}, err
 	}
 	if tables == nil {
 		tables = []model.TableRef{}
+	}
+	if databases == nil {
+		databases = []model.DatabaseRef{}
 	}
 	sources, err := a.store.LoadSources()
 	if err != nil {
@@ -792,7 +880,11 @@ func (a *App) dataCatalogLocked() (model.DataCatalog, error) {
 	if sources == nil {
 		sources = []model.Source{}
 	}
-	return model.DataCatalog{Tables: tables, Sources: sources}, nil
+	return model.DataCatalog{
+		Databases: databases,
+		Tables:    tables,
+		Sources:   sources,
+	}, nil
 }
 
 func (a *App) settingsInfoLocked() model.SettingsInfo {
@@ -812,6 +904,7 @@ func (a *App) settingsInfoLocked() model.SettingsInfo {
 		DefaultWorkspace:  a.defaultWorkspace,
 		SettingsPath:      settingsPath,
 		WorkspaceOverride: a.workspaceOverride,
+		UIFontSize:        a.config.UIFontSize,
 	}
 }
 

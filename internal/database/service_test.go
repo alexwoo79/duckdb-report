@@ -92,6 +92,41 @@ func TestServiceTableNames(t *testing.T) {
 	}
 }
 
+func TestServiceListDatabases(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	service, err := Open(context.Background(), filepath.Join(root, "current.duckdb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := service.Close(); closeErr != nil {
+			t.Errorf("Close() error = %v", closeErr)
+		}
+	})
+	attachedPath := filepath.Join(root, "attached.duckdb")
+	if _, err := service.Query(context.Background(), fmt.Sprintf(
+		"ATTACH %s AS attached_db",
+		quoteLiteral(attachedPath),
+	), 1); err != nil {
+		t.Fatal(err)
+	}
+
+	databases, err := service.ListDatabases(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(databases) != 2 {
+		t.Fatalf("databases = %#v", databases)
+	}
+	if !databases[0].IsCurrent || databases[0].Name != "current" {
+		t.Fatalf("current database = %#v", databases[0])
+	}
+	if databases[1].Name != "attached_db" || databases[1].IsCurrent {
+		t.Fatalf("attached database = %#v", databases[1])
+	}
+}
+
 func TestServiceExplain(t *testing.T) {
 	t.Parallel()
 	service, err := Open(context.Background(), filepath.Join(t.TempDir(), "explain.duckdb"))
@@ -281,6 +316,49 @@ func TestServiceDeleteSource(t *testing.T) {
 		if table.Name == "imported_data" {
 			t.Fatalf("deleted table still present: %#v", table)
 		}
+	}
+}
+
+func TestServiceSQLCompletions(t *testing.T) {
+	t.Parallel()
+	service, err := Open(context.Background(), filepath.Join(t.TempDir(), "completions.duckdb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if closeErr := service.Close(); closeErr != nil {
+			t.Errorf("Close() error = %v", closeErr)
+		}
+	})
+	if _, err := service.Query(context.Background(), `
+		CREATE TABLE completion_orders(
+			order_id BIGINT,
+			customer_name VARCHAR,
+			total DECIMAL(18, 2)
+		);
+	`, 10); err != nil {
+		t.Fatal(err)
+	}
+
+	catalog, err := service.SQLCompletions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found *model.SQLCompletionTable
+	for i := range catalog.Tables {
+		if catalog.Tables[i].Name == "completion_orders" {
+			found = &catalog.Tables[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatalf("completion table not found: %#v", catalog.Tables)
+	}
+	if len(found.Columns) != 3 {
+		t.Fatalf("columns = %#v", found.Columns)
+	}
+	if found.Columns[0].Name != "order_id" || found.Columns[0].Type != "BIGINT" {
+		t.Fatalf("first column = %#v", found.Columns[0])
 	}
 }
 

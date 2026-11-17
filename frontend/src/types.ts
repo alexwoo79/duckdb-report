@@ -40,6 +40,27 @@ export interface TableRef {
   type: string;
 }
 
+export interface DatabaseRef {
+  name: string;
+  path: string;
+  type: string;
+  readOnly: boolean;
+  isCurrent: boolean;
+}
+
+export interface ColumnRef {
+  name: string;
+  type: string;
+}
+
+export interface SQLCompletionTable extends TableRef {
+  columns: ColumnRef[];
+}
+
+export interface SQLCompletionCatalog {
+  tables: SQLCompletionTable[];
+}
+
 export interface DataSource {
   kind: string;
   path: string;
@@ -62,6 +83,7 @@ export interface Environment {
 export interface AppSettings {
   displayName: string;
   workspace: string;
+  uiFontSize: number;
 }
 
 export interface SettingsInfo {
@@ -72,6 +94,7 @@ export interface SettingsInfo {
   defaultWorkspace: string;
   settingsPath: string;
   workspaceOverride: boolean;
+  uiFontSize: number;
 }
 
 export interface RunInfo {
@@ -89,6 +112,7 @@ export interface Bootstrap {
   sqlFiles: FileRef[];
   templates: FileRef[];
   workflows: FileRef[];
+  databases: DatabaseRef[];
   tables: TableRef[];
   sources: DataSource[];
   runs: RunInfo[];
@@ -122,6 +146,7 @@ export interface ImportResult {
 }
 
 export interface DataCatalog {
+  databases: DatabaseRef[];
   tables: TableRef[];
   sources: DataSource[];
 }
@@ -158,6 +183,7 @@ export interface Backend {
   PickWorkspaceDirectory(): Promise<string>;
   OpenWorkspace(): Promise<void>;
   ExportWorkspaceDuckDB(): Promise<string>;
+  LoadSQLCompletions(): Promise<SQLCompletionCatalog>;
   ListSheets(path: string): Promise<string[]>;
   ImportData(request: {
     path: string;
@@ -171,6 +197,7 @@ export interface Backend {
   ReadText(path: string): Promise<FileContent>;
   SaveText(path: string, content: string): Promise<FileContent>;
   SaveSQLAs(content: string): Promise<FileContent>;
+  SaveQMDAs(content: string): Promise<FileContent>;
   SaveWorkflow(workflow: Workflow): Promise<void>;
   ExportWorkflowPackage(): Promise<string>;
   ImportWorkflowPackage(): Promise<Workflow>;
@@ -187,6 +214,7 @@ export interface Backend {
     templatePath: string;
   }): Promise<RenderResult>;
   ExportQueryCSV(result: QueryResult): Promise<string>;
+  ExportQueryParquet(result: QueryResult): Promise<string>;
   OpenOutput(runId: string, format: "html" | "pdf"): Promise<void>;
   SaveOutput(runId: string, format: "html" | "pdf"): Promise<string>;
   SaveSettings(settings: AppSettings): Promise<SettingsInfo>;

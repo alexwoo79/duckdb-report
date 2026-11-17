@@ -13,9 +13,12 @@
 ## 能力
 
 - 接入 CSV、JSON、Parquet、Excel（`.xlsx` / `.xlsm`）和 DuckDB 数据库。
+- 数据资产按 database → schema → table/view 分层浏览，支持 attached database、只读状态和断开连接。
 - SQL 编辑、保存、执行与结果表格分页展示。
-- 查询结果支持全屏查看并导出 UTF-8 BOM CSV，便于 Excel 直接打开。
-- QMD 编辑、HTML/PDF 渲染及应用内预览。
+- SQL 编辑器支持 DuckDB 关键字、函数、表与字段补全，Tab 接受候选，以及运行、保存、搜索和注释快捷键。
+- 查询结果支持全屏查看，并导出 UTF-8 BOM CSV 或压缩 Parquet 文件。
+- QMD 编辑器支持 Quarto YAML、代码块选项、短代码和交叉引用补全，新建、另存以及 HTML/PDF 渲染快捷键。
+- SQL/QMD 编辑器支持 `⌘/Ctrl + -/+` 调整字号；设置页支持 11–17px 界面字体大小。
 - 用 `Preset → Step → Workflow` 组合可复用分析流程。
 - Preset 支持查看参数、新建、编辑、复制 ID、删除及一键加入步骤。
 - SQL Preset 支持 `file` 文件模式与 `inline` 完整 SQL 模式，并可打开原生 SQL 文件选择器。

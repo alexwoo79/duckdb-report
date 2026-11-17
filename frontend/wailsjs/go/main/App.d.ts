@@ -8,6 +8,8 @@ export function DeleteSource(arg1:model.Source):Promise<model.DataCatalog>;
 
 export function ExportQueryCSV(arg1:model.QueryResult):Promise<string>;
 
+export function ExportQueryParquet(arg1:model.QueryResult):Promise<string>;
+
 export function ExportWorkflowPackage():Promise<string>;
 
 export function ExportWorkspaceDuckDB():Promise<string>;
@@ -17,6 +19,8 @@ export function ImportData(arg1:model.ImportRequest):Promise<model.ImportResult>
 export function ImportWorkflowPackage():Promise<model.Workflow>;
 
 export function ListSheets(arg1:string):Promise<Array<string>>;
+
+export function LoadSQLCompletions():Promise<model.SQLCompletionCatalog>;
 
 export function OpenOutput(arg1:string,arg2:string):Promise<void>;
 
@@ -39,6 +43,8 @@ export function RunSQL(arg1:string,arg2:number,arg3:string):Promise<model.QueryR
 export function RunWorkflow(arg1:model.WorkflowRequest):Promise<model.WorkflowResult>;
 
 export function SaveOutput(arg1:string,arg2:string):Promise<string>;
+
+export function SaveQMDAs(arg1:string):Promise<model.FileContent>;
 
 export function SaveSQLAs(arg1:string):Promise<model.FileContent>;
 

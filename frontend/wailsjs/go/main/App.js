@@ -14,6 +14,10 @@ export function ExportQueryCSV(arg1) {
   return window['go']['main']['App']['ExportQueryCSV'](arg1);
 }
 
+export function ExportQueryParquet(arg1) {
+  return window['go']['main']['App']['ExportQueryParquet'](arg1);
+}
+
 export function ExportWorkflowPackage() {
   return window['go']['main']['App']['ExportWorkflowPackage']();
 }
@@ -32,6 +36,10 @@ export function ImportWorkflowPackage() {
 
 export function ListSheets(arg1) {
   return window['go']['main']['App']['ListSheets'](arg1);
+}
+
+export function LoadSQLCompletions() {
+  return window['go']['main']['App']['LoadSQLCompletions']();
 }
 
 export function OpenOutput(arg1, arg2) {
@@ -76,6 +84,10 @@ export function RunWorkflow(arg1) {
 
 export function SaveOutput(arg1, arg2) {
   return window['go']['main']['App']['SaveOutput'](arg1, arg2);
+}
+
+export function SaveQMDAs(arg1) {
+  return window['go']['main']['App']['SaveQMDAs'](arg1);
 }
 
 export function SaveSQLAs(arg1) {

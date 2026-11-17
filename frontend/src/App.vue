@@ -1,8 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
-import hljs from "highlight.js/lib/core";
-import markdownLanguage from "highlight.js/lib/languages/markdown";
-import sqlLanguage from "highlight.js/lib/languages/sql";
+import {
+  computed,
+  defineAsyncComponent,
+  onBeforeUnmount,
+  onMounted,
+  reactive,
+  ref,
+  watch,
+} from "vue";
 import AppIcon from "./components/AppIcon.vue";
 import ResultGrid from "./components/ResultGrid.vue";
 import {
@@ -19,10 +24,12 @@ import type {
   Bootstrap,
   DataCatalog,
   DataSource,
+  DatabaseRef,
   Preset,
   PresetType,
   QueryResult,
   RenderResult,
+  SQLCompletionTable,
   StepEvent,
   TableRef,
   ViewName,
@@ -30,8 +37,8 @@ import type {
   WorkflowStep,
 } from "./types";
 
-hljs.registerLanguage("sql", sqlLanguage);
-hljs.registerLanguage("markdown", markdownLanguage);
+const SqlEditor = defineAsyncComponent(() => import("./components/SqlEditor.vue"));
+const QmdEditor = defineAsyncComponent(() => import("./components/QmdEditor.vue"));
 
 interface LogEntry {
   time: string;
@@ -54,7 +61,11 @@ const inspectorOpen = ref(true);
 const logsOpen = ref(true);
 const settingsBusy = ref(false);
 const exportWorkspaceBusy = ref(false);
-const settingsDraft = ref<AppSettings>({ displayName: "", workspace: "" });
+const settingsDraft = ref<AppSettings>({
+  displayName: "",
+  workspace: "",
+  uiFontSize: 13,
+});
 const logs = ref<LogEntry[]>([]);
 const workflowBusy = ref(false);
 const workflowTransferBusy = ref(false);
@@ -92,14 +103,30 @@ const reportEditorCollapsed = ref(false);
 const reportPreviewCollapsed = ref(false);
 const sqlSplitRef = ref<HTMLElement | null>(null);
 const reportSplitRef = ref<HTMLElement | null>(null);
-const sqlHighlightLayer = ref<HTMLElement | null>(null);
-const sqlLineNumbers = ref<HTMLElement | null>(null);
-const reportHighlightLayer = ref<HTMLElement | null>(null);
-const reportLineNumbers = ref<HTMLElement | null>(null);
+const sqlCompletionTables = ref<SQLCompletionTable[]>([]);
 let stopSplitResize: (() => void) | undefined;
 const sqlDisplayName = computed(
   () => selectedSQL.value || "临时查询（未保存）",
 );
+const newQMDContent = `---
+title: "{{title}}"
+subtitle: "Quarto 分析报告"
+date: today
+lang: zh-CN
+format:
+  html:
+    toc: true
+    embed-resources: true
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+## 分析说明
+
+在新的 QMD 文件中编写报告内容。
+`;
 
 const importOpen = ref(false);
 const importPath = ref("");
@@ -122,46 +149,194 @@ const presetTypeOptions: Array<{ value: PresetType; label: string }> = [
   { value: "report", label: "报告模板" },
   { value: "output", label: "输出配置" },
 ];
+const uiFontSizeOptions = [
+  { value: 11, label: "小" },
+  { value: 13, label: "标准" },
+  { value: 15, label: "大" },
+  { value: 17, label: "特大" },
+];
 
-const visibleTables = computed(() => {
-  const query = sqlFilter.value.trim().toLowerCase();
-  if (!query) return tables.value;
-  return tables.value.filter((table) =>
-    `${table.catalog}.${table.schema}.${table.name}`.toLowerCase().includes(query),
-  );
+interface AssetSchemaNode {
+  name: string;
+  tables: TableRef[];
+}
+
+interface AssetDatabaseNode {
+  database: DatabaseRef;
+  schemas: AssetSchemaNode[];
+  tableCount: number;
+}
+
+const treeExpansionStorageKey = "duckdb-report-database-tree-expansion";
+
+function loadTreeExpansion(): Record<string, boolean> {
+  try {
+    const value = JSON.parse(localStorage.getItem(treeExpansionStorageKey) ?? "{}");
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return value as Record<string, boolean>;
+  } catch {
+    return {};
+  }
+}
+
+const expandedTreeNodes = ref<Record<string, boolean>>(loadTreeExpansion());
+
+const databaseTree = computed<AssetDatabaseNode[]>(() => {
+  const query = sqlFilter.value.trim().toLocaleLowerCase();
+  const databases = new Map<string, AssetDatabaseNode>();
+
+  for (const database of state.value?.databases ?? []) {
+    databases.set(database.name, {
+      database,
+      schemas: [],
+      tableCount: 0,
+    });
+  }
+
+  const schemaMaps = new Map<string, Map<string, AssetSchemaNode>>();
+  for (const table of tables.value) {
+    let databaseNode = databases.get(table.catalog);
+    if (!databaseNode) {
+      databaseNode = {
+        database: {
+          name: table.catalog,
+          path: "",
+          type: "catalog",
+          readOnly: false,
+          isCurrent: table.catalog === "workspace",
+        },
+        schemas: [],
+        tableCount: 0,
+      };
+      databases.set(table.catalog, databaseNode);
+    }
+    let schemaMap = schemaMaps.get(table.catalog);
+    if (!schemaMap) {
+      schemaMap = new Map();
+      schemaMaps.set(table.catalog, schemaMap);
+    }
+    let schemaNode = schemaMap.get(table.schema);
+    if (!schemaNode) {
+      schemaNode = { name: table.schema, tables: [] };
+      schemaMap.set(table.schema, schemaNode);
+      databaseNode.schemas.push(schemaNode);
+    }
+    schemaNode.tables.push(table);
+    databaseNode.tableCount += 1;
+  }
+
+  const result = [...databases.values()]
+    .map((databaseNode) => {
+      databaseNode.schemas.sort((left, right) => {
+        if ((left.name === "main") !== (right.name === "main")) {
+          return left.name === "main" ? -1 : 1;
+        }
+        return left.name.localeCompare(right.name, "zh-CN");
+      });
+      for (const schema of databaseNode.schemas) {
+        schema.tables.sort((left, right) =>
+          left.name.localeCompare(right.name, "zh-CN", {
+            numeric: true,
+            sensitivity: "base",
+          }),
+        );
+      }
+      if (!query) return databaseNode;
+
+      const databaseText = [
+        databaseNode.database.name,
+        databaseNode.database.path,
+        databaseNode.database.type,
+      ]
+        .join(" ")
+        .toLocaleLowerCase();
+      if (databaseText.includes(query)) return databaseNode;
+
+      const matchingSchemas = databaseNode.schemas
+        .map((schema) => {
+          if (schema.name.toLocaleLowerCase().includes(query)) return schema;
+          const matchingTables = schema.tables.filter((table) =>
+            `${schema.name}.${table.name}`.toLocaleLowerCase().includes(query),
+          );
+          return matchingTables.length > 0
+            ? { ...schema, tables: matchingTables }
+            : null;
+        })
+        .filter((schema): schema is AssetSchemaNode => schema !== null);
+      if (matchingSchemas.length === 0) return null;
+      return {
+        ...databaseNode,
+        schemas: matchingSchemas,
+        tableCount: matchingSchemas.reduce(
+          (total, schema) => total + schema.tables.length,
+          0,
+        ),
+      };
+    })
+    .filter((databaseNode): databaseNode is AssetDatabaseNode => databaseNode !== null)
+    .sort((left, right) => {
+      if (left.database.isCurrent !== right.database.isCurrent) {
+        return left.database.isCurrent ? -1 : 1;
+      }
+      return left.database.name.localeCompare(right.database.name, "zh-CN");
+    });
+
+  return result;
 });
 
-const highlightedSQL = computed(() =>
-  hljs.highlight(sqlContent.value || " ", {
-    language: "sql",
-    ignoreIllegals: true,
-  }).value,
-);
+function databaseNodeKey(database: DatabaseRef): string {
+  return `database:${database.name}`;
+}
 
-const highlightedQMD = computed(() => {
-  const highlighted = hljs.highlight(reportContent.value || " ", {
-    language: "markdown",
-    ignoreIllegals: true,
-  }).value;
-  return highlighted.replace(
-    /(\{\{\s*[a-zA-Z0-9_.-]+\s*\}\})/g,
-    '<span class="hljs-template-variable">$1</span>',
+function schemaNodeKey(database: DatabaseRef, schema: string): string {
+  return `schema:${database.name}.${schema}`;
+}
+
+function isTreeNodeExpanded(key: string, fallback: boolean): boolean {
+  if (sqlFilter.value.trim()) return true;
+  return expandedTreeNodes.value[key] ?? fallback;
+}
+
+function isDatabaseExpanded(node: AssetDatabaseNode): boolean {
+  return isTreeNodeExpanded(
+    databaseNodeKey(node.database),
+    node.database.isCurrent || databaseTree.value.length === 1,
   );
-});
+}
 
-function syncCodeScroll(
-  event: Event,
-  layer: HTMLElement | null,
-  numbers: HTMLElement | null,
-) {
-  const editor = event.currentTarget as HTMLTextAreaElement;
-  if (layer) {
-    layer.scrollTop = editor.scrollTop;
-    layer.scrollLeft = editor.scrollLeft;
+function isSchemaExpanded(database: DatabaseRef, schema: AssetSchemaNode): boolean {
+  return isTreeNodeExpanded(schemaNodeKey(database, schema.name), schema.name === "main");
+}
+
+function toggleTreeNode(key: string, fallback: boolean) {
+  expandedTreeNodes.value = {
+    ...expandedTreeNodes.value,
+    [key]: !isTreeNodeExpanded(key, fallback),
+  };
+  try {
+    localStorage.setItem(
+      treeExpansionStorageKey,
+      JSON.stringify(expandedTreeNodes.value),
+    );
+  } catch {
+    // The tree remains interactive when local storage is unavailable.
   }
-  if (numbers) {
-    numbers.scrollTop = editor.scrollTop;
-  }
+}
+
+function tableKindLabel(table: TableRef): string {
+  return table.type.toUpperCase().includes("VIEW") ? "VIEW" : "TABLE";
+}
+
+function databaseSource(database: DatabaseRef): DataSource | undefined {
+  return sources.value.find(
+    (source) => source.kind === "duckdb" && source.table === database.name,
+  );
+}
+
+function detachDatabase(database: DatabaseRef) {
+  const source = databaseSource(database);
+  if (!source) return;
+  void removeSource(source);
 }
 
 function toggleSQLPane(pane: "editor" | "result") {
@@ -695,6 +870,7 @@ async function loadInitial() {
     settingsDraft.value = {
       displayName: result.settings.displayName,
       workspace: result.settings.workspace,
+      uiFontSize: result.settings.uiFontSize || 13,
     };
     workflow.value = clone(result.workflow);
     loadStepStates();
@@ -708,6 +884,7 @@ async function loadInitial() {
       selectedSQL.value = firstSQL.path;
       await loadSQL(firstSQL.path);
     }
+    await loadSQLCompletions();
     const firstTemplate =
       result.templates.find((file) => file.path === "templates/monthly_report.qmd") ??
       result.templates[0];
@@ -738,11 +915,22 @@ async function refreshState(preserveWorkflow = true) {
       settingsDraft.value = {
         displayName: result.settings.displayName,
         workspace: result.settings.workspace,
+        uiFontSize: result.settings.uiFontSize || 13,
       };
     }
     if (current) workflow.value = current;
+    await loadSQLCompletions();
   } catch (error) {
     notify(errorMessage(error), "error");
+  }
+}
+
+async function loadSQLCompletions() {
+  try {
+    const catalog = await backend().LoadSQLCompletions();
+    sqlCompletionTables.value = catalog.tables ?? [];
+  } catch (error) {
+    pushLog("error", `SQL 补全目录加载失败：${errorMessage(error)}`);
   }
 }
 
@@ -932,8 +1120,10 @@ async function confirmImport() {
 
 function applyDataCatalog(catalog: DataCatalog) {
   if (!state.value) return;
+  state.value.databases = catalog.databases;
   state.value.tables = catalog.tables;
   state.value.sources = catalog.sources;
+  void loadSQLCompletions();
 }
 
 async function removeSource(source: DataSource) {
@@ -1027,12 +1217,13 @@ async function saveSQLAs() {
   }
 }
 
-async function runSQL(showNotification = true) {
-  if (sqlBusy.value || !sqlContent.value.trim()) return;
+async function runSQL(showNotification = true, queryOverride?: string) {
+  const content = queryOverride ?? sqlContent.value;
+  if (sqlBusy.value || !content.trim()) return;
   sqlBusy.value = true;
   const started = performance.now();
   try {
-    const query = resolveTemplate(sqlContent.value, runtimeParams.value);
+    const query = resolveTemplate(content, runtimeParams.value);
     sqlResult.value = await backend().RunSQL(query, 500, selectedSQL.value);
     pushLog(
       "success",
@@ -1050,6 +1241,10 @@ async function runSQL(showNotification = true) {
   }
 }
 
+function runSQLFromEditor(query: string) {
+  void runSQL(true, query);
+}
+
 function explainSelectedSQL() {
   if (!selectedSQL.value) {
     return "临时查询尚未绑定文件；保存时会打开“另存为”窗口。";
@@ -1063,6 +1258,10 @@ function explainSelectedSQL() {
 }
 
 async function loadTemplate(path: string) {
+  if (!path) {
+    startNewQMD();
+    return;
+  }
   try {
     const file = await backend().ReadText(path);
     selectedTemplate.value = file.path;
@@ -1076,6 +1275,20 @@ async function loadTemplate(path: string) {
     previewError.value = message;
     notify(message, "error");
   }
+}
+
+function startNewQMD() {
+  selectedTemplate.value = "";
+  reportContent.value = newQMDContent;
+  previewUrl.value = "";
+  previewError.value = "";
+  renderResult.value = null;
+  activeRunID.value = "";
+}
+
+async function newQMDFile() {
+  startNewQMD();
+  await saveQMDAs();
 }
 
 function activeReportPreset(): Preset | undefined {
@@ -1135,12 +1348,33 @@ async function renderReport(format: "html" | "pdf") {
   }
 }
 
+function renderReportFromEditor(format: "html" | "pdf") {
+  void renderReport(format);
+}
+
 async function saveTemplate() {
+  if (!selectedTemplate.value) {
+    await saveQMDAs();
+    return;
+  }
   try {
     const saved = await backend().SaveText(selectedTemplate.value, reportContent.value);
     selectedTemplate.value = saved.path;
     notify("QMD 已保存", "success");
     await refreshState();
+  } catch (error) {
+    notify(errorMessage(error), "error");
+  }
+}
+
+async function saveQMDAs() {
+  try {
+    const saved = await backend().SaveQMDAs(reportContent.value);
+    if (!saved.path) return;
+    selectedTemplate.value = saved.path;
+    reportContent.value = saved.content;
+    await refreshState(false);
+    notify(`QMD 已另存为：${saved.path}`, "success");
   } catch (error) {
     notify(errorMessage(error), "error");
   }
@@ -1174,6 +1408,7 @@ async function saveSettings() {
     settingsDraft.value = {
       displayName: saved.displayName,
       workspace: saved.workspace,
+      uiFontSize: saved.uiFontSize || 13,
     };
     notify(
       workspaceRestartRequired.value
@@ -1245,9 +1480,17 @@ function openRun(run: NonNullable<Bootstrap["runs"]>[number]) {
   activeView.value = "report";
 }
 
-function lineNumbers(content: string): string {
-  return content.split("\n").map((_, index) => index + 1).join("\n");
-}
+watch(
+  () => settingsDraft.value.uiFontSize,
+  (size) => {
+    const normalized = Math.min(17, Math.max(11, size || 13));
+    document.documentElement.style.setProperty(
+      "--ui-font-scale",
+      String(normalized / 13),
+    );
+  },
+  { immediate: true },
+);
 
 watch(
   () => workflow.value?.name,
@@ -1384,10 +1627,10 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </div>
-          <p class="side-help">CSV、Excel、JSON、Parquet 导入为本地表；DuckDB 文件作为外部 catalog 连接。</p>
+          <p class="side-help">按 database → schema → table/view 浏览；外部 DuckDB 作为 attached catalog 展示。</p>
           <label class="search-field">
             <AppIcon name="search" :size="14" />
-            <input v-model="sqlFilter" type="search" placeholder="筛选表名" />
+            <input v-model="sqlFilter" type="search" placeholder="筛选数据库、schema 或表" />
           </label>
           <div v-if="sources.length" class="source-list">
             <div v-for="source in sources.slice(0, 4)" :key="`${source.kind}-${source.table}`" class="source-chip">
@@ -1404,19 +1647,108 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </div>
-          <div class="table-tree">
-            <button
-              v-for="table in visibleTables"
-              :key="`${table.catalog}.${table.schema}.${table.name}`"
-              class="tree-row table-row"
-              @click="previewTable(table)"
+          <div class="database-tree">
+            <div
+              v-for="databaseNode in databaseTree"
+              :key="databaseNode.database.name"
+              class="database-node"
             >
-              <AppIcon name="table" :size="15" />
-              <span>{{ table.name }}</span>
-              <small>{{ table.schema }}</small>
-            </button>
-            <div v-if="visibleTables.length === 0" class="sidebar-empty">
-              尚未接入数据表
+              <div class="database-row">
+                <button
+                  type="button"
+                  class="tree-row database-tree-row"
+                  :title="databaseNode.database.path || databaseNode.database.name"
+                  @click="toggleTreeNode(
+                    databaseNodeKey(databaseNode.database),
+                    databaseNode.database.isCurrent || databaseTree.length === 1,
+                  )"
+                >
+                  <span
+                    class="tree-chevron"
+                    :class="{ expanded: isDatabaseExpanded(databaseNode) }"
+                  >
+                    <AppIcon name="chevron" :size="11" />
+                  </span>
+                  <AppIcon name="database" :size="15" />
+                  <span class="tree-node-name">{{ databaseNode.database.name }}</span>
+                  <span
+                    v-if="databaseNode.database.isCurrent"
+                    class="tree-badge local"
+                  >LOCAL</span>
+                  <span v-else class="tree-badge attached">ATTACHED</span>
+                  <span
+                    v-if="databaseNode.database.readOnly"
+                    class="tree-badge readonly"
+                  >READ ONLY</span>
+                  <small>{{ databaseNode.tableCount }}</small>
+                </button>
+                <button
+                  v-if="databaseSource(databaseNode.database)"
+                  type="button"
+                  class="tree-disconnect"
+                  :disabled="sourceBusy"
+                  :title="`断开 ${databaseNode.database.name}`"
+                  @click="detachDatabase(databaseNode.database)"
+                >
+                  <AppIcon name="trash" :size="12" />
+                </button>
+              </div>
+
+              <div v-if="isDatabaseExpanded(databaseNode)" class="tree-children database-children">
+                <div
+                  v-for="schema in databaseNode.schemas"
+                  :key="`${databaseNode.database.name}.${schema.name}`"
+                  class="schema-node"
+                >
+                  <button
+                    type="button"
+                    class="tree-row schema-tree-row"
+                    @click="toggleTreeNode(
+                      schemaNodeKey(databaseNode.database, schema.name),
+                      schema.name === 'main',
+                    )"
+                  >
+                    <span
+                      class="tree-chevron"
+                      :class="{
+                        expanded: isSchemaExpanded(databaseNode.database, schema),
+                      }"
+                    >
+                      <AppIcon name="chevron" :size="10" />
+                    </span>
+                    <span class="schema-branch-dot"></span>
+                    <span class="tree-node-name">{{ schema.name }}</span>
+                    <small>{{ schema.tables.length }}</small>
+                  </button>
+
+                  <div
+                    v-if="isSchemaExpanded(databaseNode.database, schema)"
+                    class="tree-children schema-children"
+                  >
+                    <button
+                      v-for="table in schema.tables"
+                      :key="`${table.catalog}.${table.schema}.${table.name}`"
+                      type="button"
+                      class="tree-row table-row"
+                      :title="`${table.catalog}.${table.schema}.${table.name}`"
+                      @click="previewTable(table)"
+                    >
+                      <AppIcon name="table" :size="14" />
+                      <span class="tree-node-name">{{ table.name }}</span>
+                      <small>{{ tableKindLabel(table) }}</small>
+                    </button>
+                  </div>
+                </div>
+                <div
+                  v-if="databaseNode.schemas.length === 0"
+                  class="sidebar-empty compact"
+                >
+                  此数据库暂无可用表
+                </div>
+              </div>
+            </div>
+            <div v-if="databaseTree.length === 0" class="sidebar-empty">
+              {{ sqlFilter.trim() ? "没有匹配的数据库或表" : "尚未接入数据表" }}
             </div>
           </div>
         </section>
@@ -1663,20 +1995,14 @@ onBeforeUnmount(() => {
                   </button>
                 </div>
               </div>
-              <div class="code-editor highlighted-code-editor sql-code-editor">
-                <pre ref="sqlLineNumbers" class="line-numbers" aria-hidden="true">{{ lineNumbers(sqlContent) }}</pre>
-                <pre
-                  ref="sqlHighlightLayer"
-                  class="code-highlight"
-                  aria-hidden="true"
-                ><code v-html="highlightedSQL"></code></pre>
-                <textarea
-                  v-model="sqlContent"
-                  spellcheck="false"
-                  aria-label="SQL 编辑器"
-                  @scroll="syncCodeScroll($event, sqlHighlightLayer, sqlLineNumbers)"
-                ></textarea>
-              </div>
+              <SqlEditor
+                v-model="sqlContent"
+                :tables="sqlCompletionTables"
+                :busy="sqlBusy"
+                @run="runSQLFromEditor"
+                @save="saveSQL"
+                @save-as="saveSQLAs"
+              />
             </section>
             <button
               v-else
@@ -1737,10 +2063,17 @@ onBeforeUnmount(() => {
             </div>
             <div class="page-actions">
               <select v-model="selectedTemplate" class="select-control wide" @change="loadTemplate(selectedTemplate)">
+                <option value="">临时报告（未保存）</option>
                 <option v-for="file in templates" :key="file.path" :value="file.path">{{ file.path }}</option>
               </select>
+              <button class="ghost-button" @click="newQMDFile">
+                <AppIcon name="plus" :size="15" /> 新建 QMD
+              </button>
               <button class="ghost-button" @click="saveTemplate">
                 <AppIcon name="save" :size="15" /> 保存
+              </button>
+              <button class="ghost-button" @click="saveQMDAs">
+                <AppIcon name="file" :size="15" /> 另存为
               </button>
               <button class="secondary-button" :disabled="reportBusy || !!qmdDependencyError" :title="qmdDependencyError" @click="renderReport('pdf')">
                 PDF
@@ -1772,7 +2105,9 @@ onBeforeUnmount(() => {
               :style="{ flexBasis: `${reportEditorRatio}%` }"
             >
               <div class="editor-topline">
-                <span>QMD SOURCE</span>
+                <span :class="{ 'scratch-document': !selectedTemplate }">
+                  {{ selectedTemplate || "临时 QMD（未保存）" }}
+                </span>
                 <div class="pane-head-actions">
                   <span>{{ reportContent.split("\n").length }} lines</span>
                   <button type="button" class="text-button" @click="toggleReportPane('editor')">
@@ -1780,20 +2115,14 @@ onBeforeUnmount(() => {
                   </button>
                 </div>
               </div>
-              <div class="code-editor highlighted-code-editor report-code-editor">
-                <pre ref="reportLineNumbers" class="line-numbers" aria-hidden="true">{{ lineNumbers(reportContent) }}</pre>
-                <pre
-                  ref="reportHighlightLayer"
-                  class="code-highlight"
-                  aria-hidden="true"
-                ><code v-html="highlightedQMD"></code></pre>
-                <textarea
-                  v-model="reportContent"
-                  spellcheck="false"
-                  aria-label="QMD 编辑器"
-                  @scroll="syncCodeScroll($event, reportHighlightLayer, reportLineNumbers)"
-                ></textarea>
-              </div>
+              <QmdEditor
+                v-model="reportContent"
+                :busy="reportBusy"
+                @render="renderReportFromEditor"
+                @save="saveTemplate"
+                @save-as="saveQMDAs"
+                @new="newQMDFile"
+              />
             </section>
             <button
               v-else
@@ -1974,6 +2303,36 @@ onBeforeUnmount(() => {
                     <strong>明亮</strong>
                     <small>适合打印和展示</small>
                   </button>
+                </div>
+                <div class="ui-font-size-setting">
+                  <div class="ui-font-size-head">
+                    <div>
+                      <strong>界面字体大小</strong>
+                      <small>影响菜单、表格、按钮和设置页面文字</small>
+                    </div>
+                    <span>{{ settingsDraft.uiFontSize }} px</span>
+                  </div>
+                  <input
+                    v-model.number="settingsDraft.uiFontSize"
+                    type="range"
+                    min="11"
+                    max="17"
+                    step="1"
+                    aria-label="界面字体大小"
+                  />
+                  <div class="ui-font-size-presets">
+                    <button
+                      v-for="option in uiFontSizeOptions"
+                      :key="option.value"
+                      type="button"
+                      :class="{ active: settingsDraft.uiFontSize === option.value }"
+                      @click="settingsDraft.uiFontSize = option.value"
+                    >
+                      <strong>{{ option.label }}</strong>
+                      <small>{{ option.value }} px</small>
+                    </button>
+                  </div>
+                  <p>编辑器文字大小可在 SQL/QMD 编辑栏使用快捷键单独调整。</p>
                 </div>
               </section>
 

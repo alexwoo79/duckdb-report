@@ -3,6 +3,7 @@ export namespace model {
 	export class AppSettings {
 	    displayName: string;
 	    workspace: string;
+	    uiFontSize: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
@@ -12,6 +13,7 @@ export namespace model {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.displayName = source["displayName"];
 	        this.workspace = source["workspace"];
+	        this.uiFontSize = source["uiFontSize"];
 	    }
 	}
 	export class SettingsInfo {
@@ -22,6 +24,7 @@ export namespace model {
 	    defaultWorkspace: string;
 	    settingsPath: string;
 	    workspaceOverride: boolean;
+	    uiFontSize: number;
 	
 	    static createFrom(source: any = {}) {
 	        return new SettingsInfo(source);
@@ -36,6 +39,7 @@ export namespace model {
 	        this.defaultWorkspace = source["defaultWorkspace"];
 	        this.settingsPath = source["settingsPath"];
 	        this.workspaceOverride = source["workspaceOverride"];
+	        this.uiFontSize = source["uiFontSize"];
 	    }
 	}
 	export class Environment {
@@ -120,6 +124,26 @@ export namespace model {
 	        this.schema = source["schema"];
 	        this.name = source["name"];
 	        this.type = source["type"];
+	    }
+	}
+	export class DatabaseRef {
+	    name: string;
+	    path: string;
+	    type: string;
+	    readOnly: boolean;
+	    isCurrent: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new DatabaseRef(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.type = source["type"];
+	        this.readOnly = source["readOnly"];
+	        this.isCurrent = source["isCurrent"];
 	    }
 	}
 	export class FileRef {
@@ -225,6 +249,7 @@ export namespace model {
 	    sqlFiles: FileRef[];
 	    templates: FileRef[];
 	    workflows: FileRef[];
+	    databases: DatabaseRef[];
 	    tables: TableRef[];
 	    sources: Source[];
 	    runs: RunInfo[];
@@ -243,6 +268,7 @@ export namespace model {
 	        this.sqlFiles = this.convertValues(source["sqlFiles"], FileRef);
 	        this.templates = this.convertValues(source["templates"], FileRef);
 	        this.workflows = this.convertValues(source["workflows"], FileRef);
+	        this.databases = this.convertValues(source["databases"], DatabaseRef);
 	        this.tables = this.convertValues(source["tables"], TableRef);
 	        this.sources = this.convertValues(source["sources"], Source);
 	        this.runs = this.convertValues(source["runs"], RunInfo);
@@ -268,7 +294,22 @@ export namespace model {
 		    return a;
 		}
 	}
+	export class ColumnRef {
+	    name: string;
+	    type: string;
+
+	    static createFrom(source: any = {}) {
+	        return new ColumnRef(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.type = source["type"];
+	    }
+	}
 	export class DataCatalog {
+	    databases: DatabaseRef[];
 	    tables: TableRef[];
 	    sources: Source[];
 	
@@ -278,6 +319,7 @@ export namespace model {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.databases = this.convertValues(source["databases"], DatabaseRef);
 	        this.tables = this.convertValues(source["tables"], TableRef);
 	        this.sources = this.convertValues(source["sources"], Source);
 	    }
@@ -301,6 +343,7 @@ export namespace model {
 		}
 	}
 	
+
 	export class FileContent {
 	    path: string;
 	    content: string;
@@ -438,6 +481,75 @@ export namespace model {
 	    }
 	}
 	
+	export class SQLCompletionTable {
+	    catalog: string;
+	    schema: string;
+	    name: string;
+	    type: string;
+	    columns: ColumnRef[];
+
+	    static createFrom(source: any = {}) {
+	        return new SQLCompletionTable(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.catalog = source["catalog"];
+	        this.schema = source["schema"];
+	        this.name = source["name"];
+	        this.type = source["type"];
+	        this.columns = this.convertValues(source["columns"], ColumnRef);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class SQLCompletionCatalog {
+	    tables: SQLCompletionTable[];
+
+	    static createFrom(source: any = {}) {
+	        return new SQLCompletionCatalog(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.tables = this.convertValues(source["tables"], SQLCompletionTable);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
 	
 	
 	
