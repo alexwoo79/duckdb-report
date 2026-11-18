@@ -181,6 +181,7 @@ func (a *App) Bootstrap() (model.Bootstrap, error) {
 	if tables == nil {
 		tables = []model.TableRef{}
 	}
+	tables = a.filterLegacySampleTables(tables)
 	if databases == nil {
 		databases = []model.DatabaseRef{}
 	}
@@ -214,7 +215,22 @@ func (a *App) LoadSQLCompletions() (model.SQLCompletionCatalog, error) {
 	}
 	ctx, cancel := context.WithTimeout(a.operationContext(), 30*time.Second)
 	defer cancel()
-	return a.database.SQLCompletions(ctx)
+	catalog, err := a.database.SQLCompletions(ctx)
+	if err != nil {
+		return model.SQLCompletionCatalog{}, err
+	}
+	if !a.hideLegacySampleTables() {
+		return catalog, nil
+	}
+	filtered := make([]model.SQLCompletionTable, 0, len(catalog.Tables))
+	for _, table := range catalog.Tables {
+		if isLegacySampleTable(table.Catalog, table.Schema, table.Name) {
+			continue
+		}
+		filtered = append(filtered, table)
+	}
+	catalog.Tables = filtered
+	return catalog, nil
 }
 
 func (a *App) displayName() string {
@@ -1041,6 +1057,7 @@ func (a *App) dataCatalogLocked() (model.DataCatalog, error) {
 	if tables == nil {
 		tables = []model.TableRef{}
 	}
+	tables = a.filterLegacySampleTables(tables)
 	if databases == nil {
 		databases = []model.DatabaseRef{}
 	}
@@ -1056,6 +1073,53 @@ func (a *App) dataCatalogLocked() (model.DataCatalog, error) {
 		Tables:    tables,
 		Sources:   sources,
 	}, nil
+}
+
+var legacySampleTableNames = map[string]struct{}{
+	"sales":                 {},
+	"customers":             {},
+	"products":              {},
+	"orders":                {},
+	"order_items":           {},
+	"order_detail":          {},
+	"monthly_summary":       {},
+	"monthly_kpi_summary":   {},
+	"sales_summary":         {},
+	"kpi_summary":           {},
+	"region_category_pivot": {},
+	"validation_results":    {},
+	"monthly_trend":         {},
+	"product_ranking":       {},
+}
+
+func (a *App) filterLegacySampleTables(tables []model.TableRef) []model.TableRef {
+	if !a.hideLegacySampleTables() {
+		return tables
+	}
+	filtered := make([]model.TableRef, 0, len(tables))
+	for _, table := range tables {
+		if isLegacySampleTable(table.Catalog, table.Schema, table.Name) {
+			continue
+		}
+		filtered = append(filtered, table)
+	}
+	return filtered
+}
+
+func (a *App) hideLegacySampleTables() bool {
+	if a.seedData || a.store == nil {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(a.store.Root, ".monthly-sales-example-v1"))
+	return err == nil
+}
+
+func isLegacySampleTable(catalog, schema, name string) bool {
+	if catalog != "workspace" || schema != "main" {
+		return false
+	}
+	_, ok := legacySampleTableNames[strings.ToLower(name)]
+	return ok
 }
 
 func (a *App) settingsInfoLocked() model.SettingsInfo {

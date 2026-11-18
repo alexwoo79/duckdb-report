@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.9 - 2026-11-18
+
+### Fixed
+
+- Exclude bundled example directories from SQL and QMD lists in existing workspaces, remove unchanged unreferenced starter files, and hide known sample tables injected by earlier workspace-switch versions.
+
 ## v0.1.8 - 2026-11-18
 
 ### Fixed

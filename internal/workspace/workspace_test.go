@@ -93,6 +93,76 @@ func TestOpenDoesNotSeedStarterAssets(t *testing.T) {
 	}
 }
 
+func TestOpenRemovesUnusedLegacySeedFiles(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	seeded, err := New(root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	custom := workflow.DefaultWorkflow()
+	custom.Name = "Contract"
+	for i := range custom.Presets {
+		params := custom.Presets[i].Params
+		for key, value := range params {
+			switch value {
+			case "data/sales.csv":
+				params[key] = "data/contract.csv"
+			case "sql/monthly_analysis.sql":
+				params[key] = "sql/contract.sql"
+			case "sql/monthly_result.sql":
+				params[key] = "sql/contract.sql"
+			case "templates/monthly_report.qmd":
+				params[key] = "templates/contract.qmd"
+			}
+		}
+	}
+	if err := seeded.SaveWorkflow(custom); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := seeded.WriteText("sql/contract.sql", "SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := seeded.WriteText("templates/contract.qmd", "# Contract"); err != nil {
+		t.Fatal(err)
+	}
+	examplesDir := filepath.Join(root, "examples", "custom")
+	if err := os.MkdirAll(examplesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(examplesDir, "query.sql"), []byte("SELECT 1"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := Open(root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		filepath.Join(store.SQL, "monthly_analysis.sql"),
+		filepath.Join(store.SQL, "monthly_result.sql"),
+		filepath.Join(store.Templates, "monthly_report.qmd"),
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("unused legacy seed file still exists: %s", path)
+		}
+	}
+	sqlFiles, err := store.ListSQL()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sqlFiles) != 1 || sqlFiles[0].Path != "sql/contract.sql" {
+		t.Fatalf("SQL files = %#v", sqlFiles)
+	}
+	templates, err := store.ListTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(templates) != 1 || templates[0].Path != "templates/contract.qmd" {
+		t.Fatalf("templates = %#v", templates)
+	}
+}
+
 func TestWriteTextRejectsTraversal(t *testing.T) {
 	t.Parallel()
 	store, err := New(t.TempDir(), nil)

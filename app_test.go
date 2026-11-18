@@ -237,6 +237,29 @@ func TestSaveSettingsDoesNotSeedExistingWorkspace(t *testing.T) {
 	}
 }
 
+func TestFilterLegacySampleTables(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".monthly-sales-example-v1"), []byte("completed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app := &App{
+		store: &workspace.Store{Root: root},
+	}
+	tables := []model.TableRef{
+		{Catalog: "workspace", Schema: "main", Name: "customers"},
+		{Catalog: "workspace", Schema: "main", Name: "contract_source"},
+		{Catalog: "external", Schema: "main", Name: "sales"},
+	}
+	filtered := app.filterLegacySampleTables(tables)
+	if len(filtered) != 2 {
+		t.Fatalf("filtered tables = %#v", filtered)
+	}
+	if filtered[0].Name != "contract_source" || filtered[1].Catalog != "external" {
+		t.Fatalf("filtered tables = %#v", filtered)
+	}
+}
+
 func TestExampleWorkflowsAreValid(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"monthly_sales_python.json", "monthly_sales_r.json"} {

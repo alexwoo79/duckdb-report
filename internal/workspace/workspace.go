@@ -27,15 +27,16 @@ var safeIDPattern = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 const legacyDemoSalesHash = "2fac6de44239defc1cef625c2f2ea9375f59e1a2705d377c0405e8d4f6ca672a"
 
 type Store struct {
-	Root         string
-	Database     string
-	Runs         string
-	Data         string
-	SQL          string
-	Templates    string
-	Workflows    string
-	SourcesFile  string
-	WorkflowFile string
+	Root            string
+	Database        string
+	Runs            string
+	Data            string
+	SQL             string
+	Templates       string
+	Workflows       string
+	SourcesFile     string
+	WorkflowFile    string
+	IncludeExamples bool
 }
 
 func New(root string, exampleFS fs.FS) (*Store, error) {
@@ -70,15 +71,16 @@ func newStore(root string, exampleFS fs.FS, seedData bool) (*Store, error) {
 		return nil, fmt.Errorf("resolve workspace root: %w", err)
 	}
 	store := &Store{
-		Root:         absolute,
-		Database:     filepath.Join(absolute, "workspace.duckdb"),
-		Runs:         filepath.Join(absolute, "runs"),
-		Data:         filepath.Join(absolute, "data"),
-		SQL:          filepath.Join(absolute, "sql"),
-		Templates:    filepath.Join(absolute, "templates"),
-		Workflows:    filepath.Join(absolute, "workflows"),
-		SourcesFile:  filepath.Join(absolute, "sources.json"),
-		WorkflowFile: filepath.Join(absolute, "workflows", "current.json"),
+		Root:            absolute,
+		Database:        filepath.Join(absolute, "workspace.duckdb"),
+		Runs:            filepath.Join(absolute, "runs"),
+		Data:            filepath.Join(absolute, "data"),
+		SQL:             filepath.Join(absolute, "sql"),
+		Templates:       filepath.Join(absolute, "templates"),
+		Workflows:       filepath.Join(absolute, "workflows"),
+		SourcesFile:     filepath.Join(absolute, "sources.json"),
+		WorkflowFile:    filepath.Join(absolute, "workflows", "current.json"),
+		IncludeExamples: seedData,
 	}
 	for _, directory := range []string{store.Data, store.SQL, store.Templates, store.Workflows, store.Runs} {
 		if err := os.MkdirAll(directory, 0o755); err != nil {
@@ -103,6 +105,11 @@ func newStore(root string, exampleFS fs.FS, seedData bool) (*Store, error) {
 	}
 	if _, err := os.Stat(store.WorkflowFile); errors.Is(err, os.ErrNotExist) {
 		if err := store.SaveWorkflow(workflow.DefaultWorkflow()); err != nil {
+			return nil, err
+		}
+	}
+	if !seedData {
+		if err := removeLegacySeedFiles(store, seed); err != nil {
 			return nil, err
 		}
 	}
@@ -272,11 +279,104 @@ func (s *Store) WriteText(path, content string) (model.FileContent, error) {
 }
 
 func (s *Store) ListSQL() ([]model.FileRef, error) {
-	return s.listFiles([]string{".sql"}, []string{s.SQL, filepath.Join(s.Root, "examples")})
+	directories := []string{s.SQL}
+	if s.IncludeExamples {
+		directories = append(directories, filepath.Join(s.Root, "examples"))
+	}
+	files, err := s.listFiles([]string{".sql"}, directories)
+	if err != nil {
+		return nil, err
+	}
+	return s.filterLegacySeedFiles(files, "sql/monthly_analysis.sql", "sql/monthly_result.sql"), nil
 }
 
 func (s *Store) ListTemplates() ([]model.FileRef, error) {
-	return s.listFiles([]string{".qmd"}, []string{s.Templates, filepath.Join(s.Root, "examples")})
+	directories := []string{s.Templates}
+	if s.IncludeExamples {
+		directories = append(directories, filepath.Join(s.Root, "examples"))
+	}
+	files, err := s.listFiles([]string{".qmd"}, directories)
+	if err != nil {
+		return nil, err
+	}
+	return s.filterLegacySeedFiles(files, "templates/monthly_report.qmd"), nil
+}
+
+func (s *Store) filterLegacySeedFiles(files []model.FileRef, paths ...string) []model.FileRef {
+	if s.IncludeExamples {
+		return files
+	}
+	blocked := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		blocked[path] = struct{}{}
+	}
+	result := make([]model.FileRef, 0, len(files))
+	for _, file := range files {
+		if _, ok := blocked[file.Path]; ok {
+			continue
+		}
+		result = append(result, file)
+	}
+	return result
+}
+
+func removeLegacySeedFiles(store *Store, seed fs.FS) error {
+	paths := []string{
+		"sql/monthly_analysis.sql",
+		"sql/monthly_result.sql",
+		"templates/monthly_report.qmd",
+	}
+	referenced, err := legacySeedReferences(store, paths)
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
+		if referenced[path] {
+			continue
+		}
+		destination := filepath.Join(store.Root, filepath.FromSlash(path))
+		current, err := os.ReadFile(destination)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("inspect legacy seed file %q: %w", path, err)
+		}
+		expected, err := fs.ReadFile(seed, path)
+		if err != nil {
+			return fmt.Errorf("read starter file %q: %w", path, err)
+		}
+		if !bytes.Equal(current, expected) {
+			continue
+		}
+		if err := os.Remove(destination); err != nil {
+			return fmt.Errorf("remove legacy seed file %q: %w", path, err)
+		}
+	}
+	return nil
+}
+
+func legacySeedReferences(store *Store, paths []string) (map[string]bool, error) {
+	referenced := make(map[string]bool, len(paths))
+	entries, err := os.ReadDir(store.Workflows)
+	if err != nil {
+		return nil, fmt.Errorf("read workspace workflows: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.EqualFold(filepath.Ext(entry.Name()), ".json") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(store.Workflows, entry.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("read workspace workflow %q: %w", entry.Name(), err)
+		}
+		for _, path := range paths {
+			if bytes.Contains(data, []byte(path)) {
+				referenced[path] = true
+			}
+		}
+	}
+	return referenced, nil
 }
 
 func (s *Store) ListWorkflows() ([]model.FileRef, error) {
