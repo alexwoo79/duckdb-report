@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.10 - 2026-11-18
+
+### Changed
+
+- Expand the remaining SQL or report pane when its counterpart is collapsed, and return the inspector's grid space to the main workspace when the inspector is hidden.
+
 ## v0.1.9 - 2026-11-18
 
 ### Fixed

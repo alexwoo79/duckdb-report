@@ -1590,7 +1590,15 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <div v-else class="app-body" :class="{ 'logs-visible': logsOpen, 'settings-mode': activeView === 'settings' }">
+    <div
+      v-else
+      class="app-body"
+      :class="{
+        'logs-visible': logsOpen,
+        'settings-mode': activeView === 'settings',
+        'inspector-hidden': !inspectorOpen || activeView === 'settings',
+      }"
+    >
       <nav class="activity-rail">
         <button
           v-for="item in [
@@ -2004,7 +2012,11 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div ref="sqlSplitRef" class="sql-split-layout">
+          <div
+            ref="sqlSplitRef"
+            class="sql-split-layout"
+            :class="{ 'editor-only': sqlResultCollapsed }"
+          >
             <section
               v-if="!sqlEditorCollapsed"
               class="editor-card sql-editor-card"
@@ -2122,7 +2134,11 @@ onBeforeUnmount(() => {
             <span v-if="qmdUsesPython" class="runtime-chip" :class="{ success: state?.environment.jupyterAvailable }">Python / Jupyter</span>
           </div>
 
-          <div ref="reportSplitRef" class="report-layout">
+          <div
+            ref="reportSplitRef"
+            class="report-layout"
+            :class="{ 'editor-only': reportPreviewCollapsed }"
+          >
             <section
               v-if="!reportEditorCollapsed"
               class="editor-card report-editor"

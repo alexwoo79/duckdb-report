@@ -248,6 +248,7 @@ textarea:focus-visible {
   overflow: hidden;
 }
 
+.app-body.inspector-hidden,
 .app-body.settings-mode {
   grid-template-columns: 72px 264px minmax(0, 1fr);
 }
@@ -1432,6 +1433,10 @@ p {
   transition: flex-basis 0.16s ease;
 }
 
+.sql-split-layout.editor-only .sql-editor-card {
+  flex: 1 1 auto;
+}
+
 .sql-view {
   display: flex;
   flex-direction: column;
@@ -2149,6 +2154,10 @@ p {
   overflow: hidden;
   flex: 0 0 auto;
   transition: flex-basis 0.16s ease;
+}
+
+.report-layout.editor-only .report-editor {
+  flex: 1 1 auto;
 }
 
 .report-preview-card {
@@ -3351,6 +3360,10 @@ kbd {
   }
 
   .app-body.settings-mode {
+    grid-template-columns: 64px 236px minmax(0, 1fr);
+  }
+
+  .app-body.inspector-hidden {
     grid-template-columns: 64px 236px minmax(0, 1fr);
   }
 }
