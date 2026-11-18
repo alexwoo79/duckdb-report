@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.8 - 2026-11-18
+
+### Fixed
+
+- Keep existing workspaces isolated by skipping built-in starter SQL, QMD, CSV, and sample tables unless the selected directory is new or is the application's default workspace.
+
 ## v0.1.7 - 2026-11-18
 
 ### Fixed

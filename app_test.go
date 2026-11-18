@@ -196,6 +196,47 @@ func TestSaveSettingsKeepsWorkspaceWhenSwitchFails(t *testing.T) {
 	}
 }
 
+func TestSaveSettingsDoesNotSeedExistingWorkspace(t *testing.T) {
+	t.Parallel()
+	oldRoot := t.TempDir()
+	targetRoot := filepath.Join(t.TempDir(), "contract-workspace")
+	target, err := workspace.Open(targetRoot, os.DirFS("."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := target.WriteText("sql/contract.sql", "SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := target.WriteText("templates/contract.qmd", "# Contract"); err != nil {
+		t.Fatal(err)
+	}
+	app := newWorkspaceSwitchTestApp(t, oldRoot)
+
+	if _, err := app.SaveSettings(model.AppSettings{
+		DisplayName: "Switch Test",
+		Workspace:   targetRoot,
+		UIFontSize:  13,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	result, err := app.Bootstrap()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameFilePath(result.Workspace, targetRoot) {
+		t.Fatalf("workspace = %q, want %q", result.Workspace, targetRoot)
+	}
+	if len(result.SQLFiles) != 1 || result.SQLFiles[0].Path != "sql/contract.sql" {
+		t.Fatalf("SQL files = %#v", result.SQLFiles)
+	}
+	if len(result.Templates) != 1 || result.Templates[0].Path != "templates/contract.qmd" {
+		t.Fatalf("templates = %#v", result.Templates)
+	}
+	if len(result.Tables) != 0 {
+		t.Fatalf("starter tables were imported into existing workspace: %#v", result.Tables)
+	}
+}
+
 func TestExampleWorkflowsAreValid(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"monthly_sales_python.json", "monthly_sales_r.json"} {

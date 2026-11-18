@@ -42,6 +42,7 @@ type App struct {
 	workspaceOverride bool
 	exampleFS         fs.FS
 	quarto            string
+	seedData          bool
 	initErr           error
 	mu                sync.Mutex
 }
@@ -69,7 +70,20 @@ func NewApp(exampleFS fs.FS) *App {
 	if root == "" {
 		root = configRoot
 	}
-	store, err := workspace.New(root, exampleFS)
+	seedData := sameFilePath(root, configRoot)
+	if !seedData {
+		seedData, err = workspace.IsEmpty(root)
+		if err != nil {
+			app.initErr = err
+			return app
+		}
+	}
+	var store *workspace.Store
+	if seedData {
+		store, err = workspace.New(root, exampleFS)
+	} else {
+		store, err = workspace.Open(root, exampleFS)
+	}
 	if err != nil {
 		app.initErr = err
 		return app
@@ -91,6 +105,7 @@ func NewApp(exampleFS fs.FS) *App {
 	app.workspaceOverride = override != ""
 	app.exampleFS = exampleFS
 	app.quarto = quarto
+	app.seedData = seedData
 	return app
 }
 
@@ -108,12 +123,14 @@ func (a *App) startup(ctx context.Context) {
 		a.initErr = err
 		return
 	}
-	if err := a.ensureDemoData(ctx); err != nil {
-		a.initErr = err
-		return
-	}
-	if err := a.ensureExampleData(ctx); err != nil {
-		a.initErr = err
+	if a.seedData {
+		if err := a.ensureDemoData(ctx); err != nil {
+			a.initErr = err
+			return
+		}
+		if err := a.ensureExampleData(ctx); err != nil {
+			a.initErr = err
+		}
 	}
 }
 
@@ -336,15 +353,24 @@ func (a *App) SaveSettings(value model.AppSettings) (model.SettingsInfo, error) 
 	}
 
 	var candidate *appWorkspaceRuntime
+	nextSeedData := a.seedData
 	if switchWorkspace {
+		seedData := sameFilePath(workspaceRoot, a.defaultWorkspace)
+		if !seedData {
+			seedData, err = workspace.IsEmpty(workspaceRoot)
+			if err != nil {
+				return model.SettingsInfo{}, err
+			}
+		}
 		ctx, cancel := context.WithTimeout(a.operationContext(), 5*time.Minute)
-		prepared, prepareErr := openWorkspaceRuntime(ctx, workspaceRoot, a.exampleFS, a.quarto)
+		prepared, prepareErr := openWorkspaceRuntime(ctx, workspaceRoot, a.exampleFS, a.quarto, seedData)
 		cancel()
 		if prepareErr != nil {
 			return model.SettingsInfo{}, fmt.Errorf("switch workspace: %w", prepareErr)
 		}
 		value.Workspace = prepared.store.Root
 		candidate = &prepared
+		nextSeedData = seedData
 	}
 
 	if err := a.settings.Save(value); err != nil {
@@ -377,6 +403,7 @@ func (a *App) SaveSettings(value model.AppSettings) (model.SettingsInfo, error) 
 		a.database = candidate.database
 		a.renderer = candidate.renderer
 		a.runner = candidate.runner
+		a.seedData = nextSeedData
 	}
 	a.config = normalized
 	if a.ctx != nil {
@@ -818,8 +845,14 @@ func openWorkspaceRuntime(
 	root string,
 	exampleFS fs.FS,
 	quarto string,
+	seedData bool,
 ) (result appWorkspaceRuntime, err error) {
-	store, err := workspace.New(root, exampleFS)
+	var store *workspace.Store
+	if seedData {
+		store, err = workspace.New(root, exampleFS)
+	} else {
+		store, err = workspace.Open(root, exampleFS)
+	}
 	if err != nil {
 		return appWorkspaceRuntime{}, err
 	}
@@ -843,11 +876,13 @@ func openWorkspaceRuntime(
 	if err = db.Reattach(ctx, sources); err != nil {
 		return appWorkspaceRuntime{}, err
 	}
-	if err = ensureDemoData(ctx, store, db); err != nil {
-		return appWorkspaceRuntime{}, err
-	}
-	if err = ensureExampleData(ctx, store, db); err != nil {
-		return appWorkspaceRuntime{}, err
+	if seedData {
+		if err = ensureDemoData(ctx, store, db); err != nil {
+			return appWorkspaceRuntime{}, err
+		}
+		if err = ensureExampleData(ctx, store, db); err != nil {
+			return appWorkspaceRuntime{}, err
+		}
 	}
 
 	renderer := report.NewRenderer(quarto, store, db)

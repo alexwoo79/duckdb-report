@@ -39,6 +39,32 @@ type Store struct {
 }
 
 func New(root string, exampleFS fs.FS) (*Store, error) {
+	return newStore(root, exampleFS, true)
+}
+
+// Open initializes an existing workspace without adding starter files or sample data.
+func Open(root string, exampleFS fs.FS) (*Store, error) {
+	return newStore(root, exampleFS, false)
+}
+
+// IsEmpty reports whether a workspace root has no user-visible entries.
+func IsEmpty(root string) (bool, error) {
+	entries, err := os.ReadDir(root)
+	if errors.Is(err, os.ErrNotExist) {
+		return true, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("inspect workspace directory: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.Name() != ".DS_Store" {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func newStore(root string, exampleFS fs.FS, seedData bool) (*Store, error) {
 	absolute, err := filepath.Abs(root)
 	if err != nil {
 		return nil, fmt.Errorf("resolve workspace root: %w", err)
@@ -64,13 +90,15 @@ func New(root string, exampleFS fs.FS) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open starter assets: %w", err)
 	}
-	if err := copyMissing(seed, absolute); err != nil {
-		return nil, err
-	}
-	if exampleFS != nil {
-		if err := copyMissingSub(exampleFS, "example", filepath.Join(absolute, "examples", "monthly_sales")); err != nil &&
-			!errors.Is(err, fs.ErrNotExist) {
+	if seedData {
+		if err := copyMissing(seed, absolute); err != nil {
 			return nil, err
+		}
+		if exampleFS != nil {
+			if err := copyMissingSub(exampleFS, "example", filepath.Join(absolute, "examples", "monthly_sales")); err != nil &&
+				!errors.Is(err, fs.ErrNotExist) {
+				return nil, err
+			}
 		}
 	}
 	if _, err := os.Stat(store.WorkflowFile); errors.Is(err, os.ErrNotExist) {

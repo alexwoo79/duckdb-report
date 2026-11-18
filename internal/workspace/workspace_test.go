@@ -37,6 +37,62 @@ func TestNewSeedsWorkspace(t *testing.T) {
 	}
 }
 
+func TestOpenDoesNotSeedStarterAssets(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		prepare func(t *testing.T, root string)
+	}{
+		{
+			name: "empty workspace",
+			prepare: func(t *testing.T, _ string) {
+				t.Helper()
+			},
+		},
+		{
+			name: "existing workspace",
+			prepare: func(t *testing.T, root string) {
+				t.Helper()
+				if err := os.MkdirAll(filepath.Join(root, "sql"), 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "sql", "contract.sql"), []byte("SELECT 1"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			test.prepare(t, root)
+			store, err := Open(root, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := store.LoadWorkflow(); err != nil {
+				t.Fatalf("load default workflow: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(store.Data, "sales.csv")); !os.IsNotExist(err) {
+				t.Fatalf("starter data was seeded: %v", err)
+			}
+			for _, path := range []string{"monthly_analysis.sql", "monthly_result.sql"} {
+				if _, err := os.Stat(filepath.Join(store.SQL, path)); !os.IsNotExist(err) {
+					t.Fatalf("starter SQL %q was seeded: %v", path, err)
+				}
+			}
+			if _, err := os.Stat(filepath.Join(store.Templates, "monthly_report.qmd")); !os.IsNotExist(err) {
+				t.Fatalf("starter template was seeded: %v", err)
+			}
+			if _, err := os.Stat(filepath.Join(store.Root, "examples", "monthly_sales")); !os.IsNotExist(err) {
+				t.Fatalf("starter example was seeded: %v", err)
+			}
+		})
+	}
+}
+
 func TestWriteTextRejectsTraversal(t *testing.T) {
 	t.Parallel()
 	store, err := New(t.TempDir(), nil)
