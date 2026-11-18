@@ -1395,13 +1395,17 @@ async function saveQMDAs() {
 }
 
 async function chooseWorkspaceDirectory() {
+  if (settingsBusy.value) return;
   if (state.value?.settings.workspaceOverride) {
     notify("当前工作区由 DUCKDB_REPORT_HOME 环境变量控制", "error");
     return;
   }
   try {
     const path = await backend().PickWorkspaceDirectory();
-    if (path) settingsDraft.value.workspace = path;
+    if (path) {
+      settingsDraft.value.workspace = path;
+      await saveSettings();
+    }
   } catch (error) {
     notify(errorMessage(error), "error");
   }
@@ -2268,7 +2272,7 @@ onBeforeUnmount(() => {
                   DuckDB 工作库、SQL、QMD、工作流和报告产物都保存在工作区目录中。
                 </p>
                 <label class="form-field">
-                  <span>工作区目录</span>
+                  <span>工作区目录（选择后自动切换）</span>
                   <input
                     v-model="settingsDraft.workspace"
                     :disabled="state?.settings.workspaceOverride"
@@ -2281,7 +2285,7 @@ onBeforeUnmount(() => {
                     :disabled="state?.settings.workspaceOverride"
                     @click="chooseWorkspaceDirectory"
                   >
-                    <AppIcon name="file" :size="14" /> 选择目录
+                    <AppIcon name="file" :size="14" /> 选择并切换
                   </button>
                   <button class="ghost-button" @click="resetWorkspacePath">恢复默认路径</button>
                   <button class="text-button" @click="openWorkspaceFolder">打开当前工作区</button>
@@ -2298,7 +2302,7 @@ onBeforeUnmount(() => {
                   当前工作区由 <code>DUCKDB_REPORT_HOME</code> 控件；取消该环境变量后才能使用保存的工作区。
                 </div>
                 <div v-else-if="workspaceChangePending" class="settings-warning pending">
-                  保存后立即切换到新工作区。现有工作区不会被删除，也不会自动迁移。
+                  手动输入路径后，请点击页面右上角“保存设置”完成切换。现有工作区不会被删除，也不会自动迁移。
                 </div>
               </section>
             </div>

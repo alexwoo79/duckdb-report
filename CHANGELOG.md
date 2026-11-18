@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.7 - 2026-11-18
+
+### Fixed
+
+- Apply a workspace selected through the directory picker immediately, without requiring a separate settings save from the page header.
+
 ## v0.1.6 - 2026-11-18
 
 ### Fixed
