@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## v0.1.6 - 2026-11-18
+
+### Fixed
+
+- Apply workspace path changes immediately by reinitializing the DuckDB session, workflow runtime, and report preview against the selected workspace, while preserving the active workspace if switching fails.
 
 ## v0.1.5 - 2026-11-17
 

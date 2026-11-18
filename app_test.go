@@ -10,6 +10,9 @@ import (
 
 	"github.com/alexwoo79/duckdb-report/internal/database"
 	"github.com/alexwoo79/duckdb-report/internal/model"
+	"github.com/alexwoo79/duckdb-report/internal/report"
+	"github.com/alexwoo79/duckdb-report/internal/runner"
+	"github.com/alexwoo79/duckdb-report/internal/settings"
 	"github.com/alexwoo79/duckdb-report/internal/workflow"
 	"github.com/alexwoo79/duckdb-report/internal/workspace"
 )
@@ -84,6 +87,112 @@ func TestSameFilePath(t *testing.T) {
 	path := filepath.Join(root, "workspace.duckdb")
 	if !sameFilePath(path, filepath.Join(root, ".", "workspace.duckdb")) {
 		t.Fatal("expected equivalent paths to match")
+	}
+}
+
+func newWorkspaceSwitchTestApp(t *testing.T, root string) *App {
+	t.Helper()
+	configRoot := t.TempDir()
+	settingsStore := settings.New(configRoot, configRoot)
+	if err := settingsStore.Save(model.AppSettings{
+		DisplayName: "Switch Test",
+		Workspace:   root,
+		UIFontSize:  13,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	configured, err := settingsStore.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := workspace.New(root, os.DirFS("."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := database.Open(t.Context(), store.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	renderer := report.NewRenderer("", store, db)
+	app := &App{
+		store:            store,
+		database:         db,
+		renderer:         renderer,
+		runner:           runner.New(store, db, renderer),
+		settings:         settingsStore,
+		config:           configured,
+		defaultWorkspace: configRoot,
+		exampleFS:        os.DirFS("."),
+	}
+	t.Cleanup(func() {
+		if closeErr := app.database.Close(); closeErr != nil {
+			t.Errorf("Close() error = %v", closeErr)
+		}
+	})
+	return app
+}
+
+func TestSaveSettingsSwitchesWorkspace(t *testing.T) {
+	t.Parallel()
+	oldRoot := t.TempDir()
+	newRoot := filepath.Join(t.TempDir(), "next")
+	app := newWorkspaceSwitchTestApp(t, oldRoot)
+	previousDB := app.database
+
+	info, err := app.SaveSettings(model.AppSettings{
+		DisplayName: "Switch Test",
+		Workspace:   newRoot,
+		UIFontSize:  13,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameFilePath(app.store.Root, newRoot) {
+		t.Fatalf("active workspace = %q, want %q", app.store.Root, newRoot)
+	}
+	if !sameFilePath(app.database.Path(), filepath.Join(newRoot, "workspace.duckdb")) {
+		t.Fatalf("active database = %q", app.database.Path())
+	}
+	if !sameFilePath(info.CurrentWorkspace, newRoot) {
+		t.Fatalf("settings current workspace = %q, want %q", info.CurrentWorkspace, newRoot)
+	}
+	if _, err := app.database.Query(t.Context(), "SELECT 1", 1); err != nil {
+		t.Fatalf("query switched workspace: %v", err)
+	}
+	if _, err := previousDB.Query(t.Context(), "SELECT 1", 1); err == nil {
+		t.Fatal("previous workspace database remained open")
+	}
+}
+
+func TestSaveSettingsKeepsWorkspaceWhenSwitchFails(t *testing.T) {
+	t.Parallel()
+	oldRoot := t.TempDir()
+	app := newWorkspaceSwitchTestApp(t, oldRoot)
+	blocker := filepath.Join(t.TempDir(), "not-a-directory")
+	if err := os.WriteFile(blocker, []byte("blocked"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := app.SaveSettings(model.AppSettings{
+		DisplayName: "Switch Test",
+		Workspace:   filepath.Join(blocker, "workspace"),
+		UIFontSize:  13,
+	})
+	if err == nil {
+		t.Fatal("expected workspace switch to fail")
+	}
+	if !sameFilePath(app.store.Root, oldRoot) {
+		t.Fatalf("active workspace changed after failure: %q", app.store.Root)
+	}
+	if _, err := app.database.Query(t.Context(), "SELECT 1", 1); err != nil {
+		t.Fatalf("query previous workspace after failure: %v", err)
+	}
+	configured, err := app.settings.Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sameFilePath(configured.Workspace, oldRoot) {
+		t.Fatalf("saved workspace = %q, want %q", configured.Workspace, oldRoot)
 	}
 }
 

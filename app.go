@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,6 +40,8 @@ type App struct {
 	config            model.AppSettings
 	defaultWorkspace  string
 	workspaceOverride bool
+	exampleFS         fs.FS
+	quarto            string
 	initErr           error
 	mu                sync.Mutex
 }
@@ -86,6 +89,8 @@ func NewApp(exampleFS fs.FS) *App {
 	app.config = savedSettings
 	app.defaultWorkspace = configRoot
 	app.workspaceOverride = override != ""
+	app.exampleFS = exampleFS
+	app.quarto = quarto
 	return app
 }
 
@@ -216,6 +221,8 @@ func (a *App) PickDataFile() (string, error) {
 }
 
 func (a *App) PickSQLFile() (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.initErr != nil {
 		return "", a.initErr
 	}
@@ -240,6 +247,8 @@ func (a *App) PickSQLFile() (string, error) {
 }
 
 func (a *App) PickWorkspaceDirectory() (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.initErr != nil {
 		return "", a.initErr
 	}
@@ -251,6 +260,8 @@ func (a *App) PickWorkspaceDirectory() (string, error) {
 }
 
 func (a *App) OpenWorkspace() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.initErr != nil {
 		return a.initErr
 	}
@@ -310,15 +321,72 @@ func (a *App) SaveSettings(value model.AppSettings) (model.SettingsInfo, error) 
 	if a.settings == nil {
 		return model.SettingsInfo{}, errors.New("settings store is not available")
 	}
+	workspacePath := strings.TrimSpace(value.Workspace)
+	if workspacePath == "" {
+		return model.SettingsInfo{}, errors.New("workspace path is empty")
+	}
+	workspaceRoot, err := filepath.Abs(workspacePath)
+	if err != nil {
+		return model.SettingsInfo{}, fmt.Errorf("resolve workspace path: %w", err)
+	}
+	value.Workspace = workspaceRoot
+	switchWorkspace := !sameFilePath(workspaceRoot, a.store.Root)
+	if switchWorkspace && a.workspaceOverride {
+		return model.SettingsInfo{}, errors.New("workspace is controlled by DUCKDB_REPORT_HOME")
+	}
+
+	var candidate *appWorkspaceRuntime
+	if switchWorkspace {
+		ctx, cancel := context.WithTimeout(a.operationContext(), 5*time.Minute)
+		prepared, prepareErr := openWorkspaceRuntime(ctx, workspaceRoot, a.exampleFS, a.quarto)
+		cancel()
+		if prepareErr != nil {
+			return model.SettingsInfo{}, fmt.Errorf("switch workspace: %w", prepareErr)
+		}
+		value.Workspace = prepared.store.Root
+		candidate = &prepared
+	}
+
 	if err := a.settings.Save(value); err != nil {
+		if candidate != nil {
+			if closeErr := candidate.database.Close(); closeErr != nil {
+				return model.SettingsInfo{}, errors.Join(
+					err,
+					fmt.Errorf("close candidate workspace database: %w", closeErr),
+				)
+			}
+		}
 		return model.SettingsInfo{}, err
 	}
 	normalized, err := a.settings.Load()
 	if err != nil {
+		if candidate != nil {
+			if closeErr := candidate.database.Close(); closeErr != nil {
+				return model.SettingsInfo{}, errors.Join(
+					err,
+					fmt.Errorf("close candidate workspace database: %w", closeErr),
+				)
+			}
+		}
 		return model.SettingsInfo{}, err
 	}
+
+	previousDatabase := a.database
+	if candidate != nil {
+		a.store = candidate.store
+		a.database = candidate.database
+		a.renderer = candidate.renderer
+		a.runner = candidate.runner
+	}
 	a.config = normalized
-	runtime.WindowSetTitle(a.ctx, a.displayName())
+	if a.ctx != nil {
+		runtime.WindowSetTitle(a.ctx, a.displayName())
+	}
+	if candidate != nil && previousDatabase != nil {
+		if err := previousDatabase.Close(); err != nil {
+			slog.Warn("close previous workspace database", "error", err)
+		}
+	}
 	return a.settingsInfoLocked(), nil
 }
 
@@ -404,6 +472,8 @@ func (a *App) RunSQL(query string, limit int, basePath string) (model.QueryResul
 }
 
 func (a *App) ReadText(path string) (model.FileContent, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.initErr != nil {
 		return model.FileContent{}, a.initErr
 	}
@@ -668,6 +738,8 @@ func (a *App) RunWorkflow(request model.WorkflowRequest) (model.WorkflowResult, 
 }
 
 func (a *App) OpenOutput(runID, format string) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.initErr != nil {
 		return a.initErr
 	}
@@ -683,6 +755,8 @@ func (a *App) OpenOutput(runID, format string) error {
 }
 
 func (a *App) SaveOutput(runID, format string) (string, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
 	if a.initErr != nil {
 		return "", a.initErr
 	}
@@ -718,10 +792,11 @@ func (a *App) SaveOutput(runID, format string) (string, error) {
 }
 
 func (a *App) previewHandler() *preview.Handler {
-	if a.store == nil {
-		return nil
-	}
-	return preview.NewHandler(a.store)
+	return preview.NewHandler(func() *workspace.Store {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		return a.store
+	})
 }
 
 func (a *App) operationContext() context.Context {
@@ -731,13 +806,70 @@ func (a *App) operationContext() context.Context {
 	return context.Background()
 }
 
+type appWorkspaceRuntime struct {
+	store    *workspace.Store
+	database *database.Service
+	renderer *report.Renderer
+	runner   *runner.Runner
+}
+
+func openWorkspaceRuntime(
+	ctx context.Context,
+	root string,
+	exampleFS fs.FS,
+	quarto string,
+) (result appWorkspaceRuntime, err error) {
+	store, err := workspace.New(root, exampleFS)
+	if err != nil {
+		return appWorkspaceRuntime{}, err
+	}
+	db, err := database.Open(ctx, store.Database)
+	if err != nil {
+		return appWorkspaceRuntime{}, err
+	}
+	defer func() {
+		if err == nil || db == nil {
+			return
+		}
+		if closeErr := db.Close(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("close workspace database after setup failure: %w", closeErr))
+		}
+	}()
+
+	sources, err := store.LoadSources()
+	if err != nil {
+		return appWorkspaceRuntime{}, err
+	}
+	if err = db.Reattach(ctx, sources); err != nil {
+		return appWorkspaceRuntime{}, err
+	}
+	if err = ensureDemoData(ctx, store, db); err != nil {
+		return appWorkspaceRuntime{}, err
+	}
+	if err = ensureExampleData(ctx, store, db); err != nil {
+		return appWorkspaceRuntime{}, err
+	}
+
+	renderer := report.NewRenderer(quarto, store, db)
+	return appWorkspaceRuntime{
+		store:    store,
+		database: db,
+		renderer: renderer,
+		runner:   runner.New(store, db, renderer),
+	}, nil
+}
+
 func (a *App) ensureDemoData(ctx context.Context) error {
-	tables, err := a.database.ListTables(ctx)
+	return ensureDemoData(ctx, a.store, a.database)
+}
+
+func ensureDemoData(ctx context.Context, store *workspace.Store, db *database.Service) error {
+	tables, err := db.ListTables(ctx)
 	if err != nil {
 		return err
 	}
-	samplePath := filepath.Join(a.store.Data, "sales.csv")
-	migrationMarker := filepath.Join(a.store.Root, ".demo-sales-owners-v1")
+	samplePath := filepath.Join(store.Data, "sales.csv")
+	migrationMarker := filepath.Join(store.Root, ".demo-sales-owners-v1")
 	tableExists := false
 	for _, table := range tables {
 		if table.Catalog == "workspace" && table.Schema == "main" && table.Name == "sales" {
@@ -746,15 +878,15 @@ func (a *App) ensureDemoData(ctx context.Context) error {
 		}
 	}
 	if tableExists {
-		if a.isDemoSalesSource(samplePath) {
+		if isDemoSalesSource(store, samplePath) {
 			if _, err := os.Stat(migrationMarker); err == nil {
-				imported, importErr := a.database.Import(ctx, model.ImportRequest{
+				imported, importErr := db.Import(ctx, model.ImportRequest{
 					Path: samplePath, Table: "sales",
 				})
 				if importErr != nil {
 					return fmt.Errorf("refresh sanitized starter sales data: %w", importErr)
 				}
-				if saveErr := a.store.SaveSource(imported.Source); saveErr != nil {
+				if saveErr := store.SaveSource(imported.Source); saveErr != nil {
 					return saveErr
 				}
 				if removeErr := os.Remove(migrationMarker); removeErr != nil && !errors.Is(removeErr, os.ErrNotExist) {
@@ -767,13 +899,13 @@ func (a *App) ensureDemoData(ctx context.Context) error {
 	if _, err := os.Stat(samplePath); err != nil {
 		return nil
 	}
-	imported, err := a.database.Import(ctx, model.ImportRequest{
+	imported, err := db.Import(ctx, model.ImportRequest{
 		Path: samplePath, Table: "sales",
 	})
 	if err != nil {
 		return fmt.Errorf("import starter sales data: %w", err)
 	}
-	if err := a.store.SaveSource(imported.Source); err != nil {
+	if err := store.SaveSource(imported.Source); err != nil {
 		return err
 	}
 	if err := os.Remove(migrationMarker); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -782,8 +914,8 @@ func (a *App) ensureDemoData(ctx context.Context) error {
 	return nil
 }
 
-func (a *App) isDemoSalesSource(samplePath string) bool {
-	sources, err := a.store.LoadSources()
+func isDemoSalesSource(store *workspace.Store, samplePath string) bool {
+	sources, err := store.LoadSources()
 	if err != nil {
 		return false
 	}
@@ -796,13 +928,17 @@ func (a *App) isDemoSalesSource(samplePath string) bool {
 }
 
 func (a *App) ensureExampleData(ctx context.Context) error {
-	marker := filepath.Join(a.store.Root, ".monthly-sales-example-v1")
+	return ensureExampleData(ctx, a.store, a.database)
+}
+
+func ensureExampleData(ctx context.Context, store *workspace.Store, db *database.Service) error {
+	marker := filepath.Join(store.Root, ".monthly-sales-example-v1")
 	if _, err := os.Stat(marker); err == nil {
-		if _, queryErr := a.database.Query(ctx, "SELECT customers FROM kpi_summary LIMIT 0", 1); queryErr == nil {
+		if _, queryErr := db.Query(ctx, "SELECT customers FROM kpi_summary LIMIT 0", 1); queryErr == nil {
 			return nil
 		}
 	}
-	exampleRoot := filepath.Join(a.store.Root, "examples", "monthly_sales")
+	exampleRoot := filepath.Join(store.Root, "examples", "monthly_sales")
 	dataFiles := []struct {
 		name  string
 		table string
@@ -822,13 +958,13 @@ func (a *App) ensureExampleData(ctx context.Context) error {
 	}
 	for _, source := range dataFiles {
 		path := filepath.Join(exampleRoot, "data", source.name)
-		imported, err := a.database.Import(ctx, model.ImportRequest{
+		imported, err := db.Import(ctx, model.ImportRequest{
 			Path: path, Kind: "csv", Table: source.table,
 		})
 		if err != nil {
 			return fmt.Errorf("seed example table %s: %w", source.table, err)
 		}
-		if err := a.store.SaveSource(imported.Source); err != nil {
+		if err := store.SaveSource(imported.Source); err != nil {
 			return err
 		}
 	}
@@ -844,7 +980,7 @@ func (a *App) ensureExampleData(ctx context.Context) error {
 			return fmt.Errorf("read example SQL %s: %w", name, err)
 		}
 		query := replacements.Replace(string(data))
-		if _, err := a.database.Query(ctx, query, 500); err != nil {
+		if _, err := db.Query(ctx, query, 500); err != nil {
 			return fmt.Errorf("execute example SQL %s: %w", name, err)
 		}
 	}

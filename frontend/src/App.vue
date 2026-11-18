@@ -436,7 +436,7 @@ const latestRun = computed(() => runs.value[0] ?? null);
 const brandPrimary = computed(
   () => state.value?.settings.displayName || "DuckDB Report Studio",
 );
-const workspaceRestartRequired = computed(() =>
+const workspaceChangePending = computed(() =>
   Boolean(
     state.value?.settings.currentWorkspace &&
       settingsDraft.value.workspace &&
@@ -861,7 +861,7 @@ function ensureWorkflowArchitecture(): boolean {
   return changed;
 }
 
-async function loadInitial() {
+async function loadInitial(): Promise<boolean> {
   loading.value = true;
   fatalError.value = "";
   try {
@@ -872,6 +872,12 @@ async function loadInitial() {
       workspace: result.settings.workspace,
       uiFontSize: result.settings.uiFontSize || 13,
     };
+    sqlResult.value = null;
+    renderResult.value = null;
+    activeRunID.value = "";
+    previewUrl.value = "";
+    previewError.value = "";
+    for (const key of Object.keys(stepStates)) delete stepStates[key];
     workflow.value = clone(result.workflow);
     loadStepStates();
     if (ensureWorkflowArchitecture()) {
@@ -883,6 +889,9 @@ async function loadInitial() {
     if (firstSQL) {
       selectedSQL.value = firstSQL.path;
       await loadSQL(firstSQL.path);
+    } else {
+      selectedSQL.value = "";
+      sqlContent.value = "";
     }
     await loadSQLCompletions();
     const firstTemplate =
@@ -891,6 +900,9 @@ async function loadInitial() {
     if (firstTemplate) {
       selectedTemplate.value = firstTemplate.path;
       await loadTemplate(firstTemplate.path);
+    } else {
+      selectedTemplate.value = "";
+      reportContent.value = "";
     }
     if (result.runs[0]?.htmlPath) {
       previewUrl.value = `/preview/${result.runs[0].id}/report.html`;
@@ -898,9 +910,11 @@ async function loadInitial() {
       activeRunID.value = result.runs[0].id;
     }
     pushLog("success", "工作区已连接，DuckDB 会话就绪。");
+    return true;
   } catch (error) {
     fatalError.value = errorMessage(error);
     pushLog("error", fatalError.value);
+    return false;
   } finally {
     loading.value = false;
   }
@@ -1403,6 +1417,7 @@ async function saveSettings() {
   if (settingsBusy.value) return;
   settingsBusy.value = true;
   try {
+    const previousWorkspace = state.value?.settings.currentWorkspace ?? "";
     const saved = await backend().SaveSettings(settingsDraft.value);
     if (state.value) state.value.settings = saved;
     settingsDraft.value = {
@@ -1410,12 +1425,17 @@ async function saveSettings() {
       workspace: saved.workspace,
       uiFontSize: saved.uiFontSize || 13,
     };
-    notify(
-      workspaceRestartRequired.value
-        ? "设置已保存；工作区将在下次启动时切换"
-        : "设置已保存",
-      "success",
-    );
+    if (previousWorkspace && saved.currentWorkspace !== previousWorkspace) {
+      const reloaded = await loadInitial();
+      notify(
+        reloaded
+          ? "工作区已切换，文件和数据库均已重新加载"
+          : "工作区已切换，但界面刷新失败",
+        reloaded ? "success" : "error",
+      );
+    } else {
+      notify("设置已保存", "success");
+    }
   } catch (error) {
     notify(errorMessage(error), "error");
   } finally {
@@ -2205,7 +2225,7 @@ onBeforeUnmount(() => {
             <div>
               <span class="eyebrow">APPLICATION SETTINGS</span>
               <h1>设置</h1>
-              <p>配置应用显示名称、默认工作区和界面外观。工作区切换会在下次启动时生效。</p>
+              <p>配置应用显示名称、当前工作区和界面外观。保存工作区修改后会立即切换并重新加载。</p>
             </div>
             <button class="primary-button" :disabled="settingsBusy" @click="saveSettings">
               <AppIcon name="save" :size="15" />
@@ -2248,7 +2268,7 @@ onBeforeUnmount(() => {
                   DuckDB 工作库、SQL、QMD、工作流和报告产物都保存在工作区目录中。
                 </p>
                 <label class="form-field">
-                  <span>下次启动使用的工作区</span>
+                  <span>工作区目录</span>
                   <input
                     v-model="settingsDraft.workspace"
                     :disabled="state?.settings.workspaceOverride"
@@ -2277,8 +2297,8 @@ onBeforeUnmount(() => {
                 <div v-if="state?.settings.workspaceOverride" class="settings-warning">
                   当前工作区由 <code>DUCKDB_REPORT_HOME</code> 控件；取消该环境变量后才能使用保存的工作区。
                 </div>
-                <div v-else-if="workspaceRestartRequired" class="settings-warning restart">
-                  工作区已改变，关闭并重新启动应用后生效。现有数据不会自动迁移。
+                <div v-else-if="workspaceChangePending" class="settings-warning pending">
+                  保存后立即切换到新工作区。现有工作区不会被删除，也不会自动迁移。
                 </div>
               </section>
             </div>

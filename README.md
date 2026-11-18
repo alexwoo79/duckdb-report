@@ -187,7 +187,7 @@ examples/monthly_sales/
 
 Windows 对应 `%APPDATA%\duckdb_report\settings.json`，Linux 对应 `${XDG_CONFIG_HOME:-~/.config}/duckdb_report/settings.json`。
 
-设置页保存新的工作区目录后，会在下次启动时启用。现有工作区数据不会自动迁移，需要时自行复制目录。通过 `DUCKDB_REPORT_HOME` 启动时，环境变量优先于设置文件中的工作区。
+设置页保存新的工作区目录后会立即切换，并重新加载工作流、SQL、QMD、数据库表和报告产物。现有工作区数据不会自动迁移，需要时自行复制目录。通过 `DUCKDB_REPORT_HOME` 启动时，环境变量优先于设置文件中的工作区。
 
 数据管理支持两种清理方式：
 

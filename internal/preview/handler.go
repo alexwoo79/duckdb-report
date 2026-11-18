@@ -10,11 +10,11 @@ import (
 )
 
 type Handler struct {
-	store *workspace.Store
+	storeProvider func() *workspace.Store
 }
 
-func NewHandler(store *workspace.Store) *Handler {
-	return &Handler{store: store}
+func NewHandler(storeProvider func() *workspace.Store) *Handler {
+	return &Handler{storeProvider: storeProvider}
 }
 
 func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
@@ -33,7 +33,12 @@ func (h *Handler) ServeHTTP(response http.ResponseWriter, request *http.Request)
 		http.NotFound(response, request)
 		return
 	}
-	runDir, err := h.store.RunDir(parts[0])
+	store := h.storeProvider()
+	if store == nil {
+		http.NotFound(response, request)
+		return
+	}
+	runDir, err := store.RunDir(parts[0])
 	if err != nil {
 		http.NotFound(response, request)
 		return
