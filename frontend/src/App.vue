@@ -36,6 +36,7 @@ import type {
   Workflow,
   WorkflowStep,
 } from "./types";
+import appIcon from "./assets/images/app-icon.svg";
 
 const SqlEditor = defineAsyncComponent(() => import("./components/SqlEditor.vue"));
 const QmdEditor = defineAsyncComponent(() => import("./components/QmdEditor.vue"));
@@ -1543,9 +1544,7 @@ onBeforeUnmount(() => {
   <div class="app-shell" :data-theme="theme">
     <header class="titlebar">
       <div class="brand">
-        <div class="brand-mark">
-          <span></span><span></span><span></span>
-        </div>
+        <img class="brand-icon" :src="appIcon" alt="" aria-hidden="true" />
         <div class="brand-copy">
           <strong>{{ brandPrimary }}</strong>
         </div>

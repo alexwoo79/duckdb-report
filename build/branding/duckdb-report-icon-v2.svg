@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="DuckDB Report Studio icon">
+  <defs>
+    <linearGradient id="tile" x1="156" y1="108" x2="858" y2="930" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0b303d"/>
+      <stop offset="0.55" stop-color="#092633"/>
+      <stop offset="1" stop-color="#064a50"/>
+    </linearGradient>
+    <linearGradient id="duck" x1="360" y1="308" x2="560" y2="720" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffe765"/>
+      <stop offset="1" stop-color="#ffc632"/>
+    </linearGradient>
+    <linearGradient id="bill" x1="556" y1="405" x2="788" y2="568" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffbd62"/>
+      <stop offset="1" stop-color="#ff7a1a"/>
+    </linearGradient>
+    <linearGradient id="paper" x1="300" y1="240" x2="748" y2="810" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fffdf7"/>
+      <stop offset="1" stop-color="#f8efdc"/>
+    </linearGradient>
+    <filter id="tileShadow" x="-20%" y="-20%" width="140%" height="150%">
+      <feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#021116" flood-opacity="0.34"/>
+    </filter>
+    <filter id="markShadow" x="-25%" y="-25%" width="160%" height="170%">
+      <feDropShadow dx="0" dy="18" stdDeviation="17" flood-color="#031b24" flood-opacity="0.3"/>
+    </filter>
+    <mask id="quartoMask">
+      <circle cx="650" cy="392" r="214" fill="#fff"/>
+      <rect x="626" y="166" width="48" height="452" rx="24" fill="#000"/>
+      <rect x="424" y="368" width="452" height="48" rx="24" fill="#000"/>
+    </mask>
+    <clipPath id="pageClip">
+      <path d="M326 220h316l144 144v352c0 58-47 104-104 104H326c-58 0-104-47-104-104V324c0-58 47-104 104-104Z"/>
+    </clipPath>
+  </defs>
+
+  <g filter="url(#tileShadow)">
+    <rect x="38" y="38" width="948" height="948" rx="220" fill="url(#tile)"/>
+    <rect x="49" y="49" width="926" height="926" rx="208" fill="none" stroke="#1b5b65" stroke-width="10" opacity="0.72"/>
+  </g>
+
+  <path d="M156 776c112 82 338 110 527 44 118-41 179-102 207-168" fill="none" stroke="#24717a" stroke-width="15" stroke-linecap="round" opacity="0.28"/>
+
+  <g transform="rotate(-2.5 512 512)" filter="url(#markShadow)">
+    <path d="M326 220h316l144 144v352c0 58-47 104-104 104H326c-58 0-104-47-104-104V324c0-58 47-104 104-104Z" fill="url(#paper)"/>
+    <path d="M642 220v120c0 15 12 26 26 26h118Z" fill="#e5d8c1"/>
+    <path d="M642 220l144 144h-118c-15 0-26-11-26-26Z" fill="#f4ead8"/>
+
+    <g clip-path="url(#pageClip)" opacity="0.55">
+      <rect x="286" y="307" width="128" height="20" rx="10" fill="#aac5c7"/>
+      <rect x="286" y="345" width="214" height="20" rx="10" fill="#aac5c7"/>
+      <rect x="286" y="383" width="164" height="20" rx="10" fill="#aac5c7"/>
+    </g>
+
+    <circle cx="650" cy="392" r="214" fill="#74aadb" mask="url(#quartoMask)"/>
+
+    <path d="M333 612c0 54 45 98 100 98h84c55 0 100-44 100-98v-72H333Z" fill="url(#duck)"/>
+    <circle cx="427" cy="505" r="177" fill="url(#duck)"/>
+    <path d="M535 422c83-11 195 2 254 41 47 31 52 84 8 111-43 27-102 13-139-13-43-30-82-38-130-35Z" fill="url(#bill)"/>
+    <circle cx="477" cy="472" r="32" fill="#08202b"/>
+    <circle cx="487" cy="461" r="8" fill="#ffffff" opacity="0.72"/>
+
+    <g fill="none" stroke="#ffe98b" stroke-width="14" stroke-linecap="round" opacity="0.85">
+      <path d="M351 663c50 24 154 29 266-1"/>
+      <path d="M356 706c52 22 147 27 252 0"/>
+    </g>
+  </g>
+
+  <path d="M188 831c105 52 277 71 439 37" fill="none" stroke="#0a3540" stroke-width="18" stroke-linecap="round" opacity="0.75"/>
+</svg>

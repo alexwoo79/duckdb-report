@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.11 - 2026-11-19
+
+### Changed
+
+- Tighten dashboard spacing, align the log drawer with the main content gutters, soften card and overlay shadows, brighten the light palette, and use the new application icon in the title bar.
+
 ## v0.1.10 - 2026-11-18
 
 ### Changed
