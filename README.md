@@ -8,25 +8,24 @@
   <img src="build/appicon.png" width="160" alt="DuckDB Report Studio icon">
 </p>
 
-一个面向本地分析交付的 DuckDB + SQL + Quarto 工作台。界面使用 Vue 3 + TypeScript，桌面壳与执行层使用 Go + Wails。
+一个以 SQL 为中心的本地 DuckDB + Quarto 分析工作台。界面使用 Vue 3 + TypeScript，桌面壳与执行层使用 Go + Wails。桌面版只保留 SQL 与报告两个核心分析页面，减少配置负担，让注意力持续停留在找源文件、运行查询和生成数据表上。
 
 ## 能力
 
 - 接入 CSV、JSON、Parquet、Excel（`.xlsx` / `.xlsm`）和 DuckDB 数据库。
 - 数据资产按 database → schema → table/view 分层浏览，支持 attached database、只读状态和断开连接。
+- “数据与分析资产”侧栏支持拖动、键盘方向键和双击恢复默认宽度，较长的表名可以完整展开。
 - SQL 编辑、保存、执行与结果表格分页展示。
 - SQL 编辑器支持 DuckDB 关键字、函数、表与字段补全，Tab 接受候选，以及运行、保存、搜索和注释快捷键。
 - 查询结果支持全屏查看，并导出 UTF-8 BOM CSV 或压缩 Parquet 文件。
 - QMD 编辑器支持 Quarto YAML、代码块选项、短代码和交叉引用补全，新建、另存以及 HTML/PDF 渲染快捷键。
 - SQL/QMD 编辑器支持 `⌘/Ctrl + -/+` 调整字号；设置页支持 11–17px 界面字体大小。
-- 用 `Preset → Step → Workflow` 组合可复用分析流程。
-- Preset 支持查看参数、新建、编辑、复制 ID、删除及一键加入步骤。
-- SQL Preset 支持 `file` 文件模式与 `inline` 完整 SQL 模式，并可打开原生 SQL 文件选择器。
-- 工作流支持 ZIP 包导出/导入，包含工作流定义及引用的 SQL、QMD、模板样式和数据文件。
-- 报告后可追加输出节点，把 HTML/PDF、QMD、assets 与该次报告的 `analysis.duckdb` 快照一起打包为 ZIP。
+- 手工分析路径固定为“打开 SQL → 运行并物化结果表 → 在 QMD 编写分析代码 → 生成 HTML/PDF”。
+- 报告页不预设数据 SQL；Python、R、图表和最终表格代码全部由用户在 QMD 中维护。
+- 报告同时保留 QMD、HTML/PDF、日志与 `analysis.duckdb` 快照，便于审阅和复用。
 - macOS、Windows 与 Linux 发布包支持原生桌面运行，界面沿用 `duckui_notebook` 的图标与视觉风格。
-- 使用 `{{variable}}` 在 SQL、QMD、路径和查询中共享参数。
-- 工作流步骤实时状态、运行日志和独立产物目录。
+- 使用 `{{variable}}` 在 SQL 与 QMD 中共享参数。
+- SQL 与报告执行日志、独立产物目录和最近产物入口。
 - 设置页可修改应用显示名、目标工作区和主题，并查看报告运行时状态。
 - 工作区可导出为独立 `.duckdb` 发布快照，使用 R DuckDB 驱动可读取的兼容存储格式。
 - 深色/浅色主题，布局延续 `duckui_notebook` 的三栏工作台和低干扰工具栏风格。
@@ -38,7 +37,7 @@ main.go / app.go    Wails 桌面入口与前端绑定
 internal/cli        CLI 命令树与无界面工作区执行
 internal/database   DuckDB 会话、数据导入、SQL 执行
 internal/report     Quarto 渲染与报告表格生成
-internal/runner     Workflow 步骤编排
+internal/runner     可选的 Workflow CLI 兼容执行层
 internal/workspace  工作区、模板、参数与产物管理
 internal/preview    受控 HTML/PDF 预览路由
 frontend            Vue 3 + TypeScript + Vite
@@ -100,9 +99,9 @@ build/bin/duckdb-report-cli.exe
 也可以直接使用：
 
 ```bash
-wails build
-wails build -platform linux/amd64 -tags webkit2_41
-wails build -platform windows/amd64
+wails build -trimpath -ldflags="-s -w"
+wails build -platform linux/amd64 -tags webkit2_41 -trimpath -ldflags="-s -w"
+wails build -platform windows/amd64 -trimpath -ldflags="-s -w"
 ```
 
 Linux 默认使用 `webkit2_41` 构建标签，并通过 `GOTOOLCHAIN=go1.26.0` 固定已验证的 Wails 2.13 工具链。需要兼容仍只提供 WebKitGTK 4.0 的旧发行版时，可使用 `make build-linux LINUX_WEBKIT_TAGS=webkit2_40`，并在目标发行版上验证对应开发包。
@@ -113,30 +112,26 @@ GitHub Actions 的 `v*` 标签发布会分别编译 macOS Universal（Apple Sili
 
 桌面二进制在带子命令时进入 CLI 模式；发布包同时提供独立的
 `duckdb-report-cli`，避免 Windows GUI 子系统影响控制台输出。CLI 与 GUI
-共用工作区、DuckDB、Quarto 和 Workflow 执行层。
+共用工作区、DuckDB 与 Quarto。Workflow 命令仅为旧工作区和自动化脚本保留兼容。
 
 ```bash
 duckdb-report-cli --workspace /path/to/workspace status --json
 duckdb-report-cli --workspace /path/to/workspace query \
-  --file sql/monthly_analysis.sql --limit 100 --json
+  --file examples/monthly_sales/sql/01_join.sql --limit 100 --json
 duckdb-report-cli --workspace /path/to/workspace doctor --json
-duckdb-report-cli --workspace /path/to/workspace workflow validate --json
-duckdb-report-cli --workspace /path/to/workspace workflow run \
-  --param start_date=2026-01-01 --param end_date=2026-12-31 --json
 duckdb-report-cli --workspace /path/to/workspace render \
-  --template templates/monthly_report.qmd --format pdf \
-  --query-file sql/monthly_result.sql --json
+  --template examples/monthly_sales/reports/monthly_sales_python.qmd \
+  --format html --query "SELECT * FROM region_category_pivot" --json
 ```
 
 主要命令：
 
 - `status`：工作区、DuckDB、Quarto、R、Python、Jupyter、表和数据源状态。
 - `query`：执行文件或内联 SQL，支持 `.read`。
-- `doctor`：只读检查 Workflow、SQL、QMD、资源路径和运行时；`--explain`
-  还会验证报告查询能否在当前工作库中绑定执行计划。
+- `doctor`：只读检查 SQL、QMD、资源路径和运行时；旧工作区仍会校验其兼容配置。
 - `import`：导入 CSV、JSON、Parquet、Excel 或附加 DuckDB。
-- `render`：渲染 HTML/PDF，并支持 `query_*` 命名表格。
-- `workflow validate|run|import|export`：无界面验证、运行与迁移工作流。
+- `render`：渲染 QMD 为 HTML/PDF；QMD 通过 `{{database}}` 读取报告快照。
+- `workflow validate|run|import|export`：可选的旧版兼容命令，不作为日常分析入口。
 
 `--json` 将机器可读结果写到 stdout，诊断和步骤进度写到 stderr；退出码 `0`
 表示成功，`1` 表示运行错误，`2` 表示参数或命令使用错误。应用正在运行时不要用
@@ -187,12 +182,12 @@ examples/monthly_sales/
 
 Windows 对应 `%APPDATA%\duckdb_report\settings.json`，Linux 对应 `${XDG_CONFIG_HOME:-~/.config}/duckdb_report/settings.json`。
 
-设置页保存新的工作区目录后会立即切换，并重新加载工作流、SQL、QMD、数据库表和报告产物。已有工作区只读取现有内容，不会注入内置示例；全新的空目录和默认工作区会初始化示例资产。现有工作区数据不会自动迁移，需要时自行复制目录。通过 `DUCKDB_REPORT_HOME` 启动时，环境变量优先于设置文件中的工作区。
+设置页保存新的工作区目录后会立即切换，并重新加载 SQL、QMD、数据库表和报告产物。已有工作区只读取现有内容，不会注入内置示例；全新的空目录和默认工作区会初始化示例资产。现有工作区数据不会自动迁移，需要时自行复制目录。通过 `DUCKDB_REPORT_HOME` 启动时，环境变量优先于设置文件中的工作区。
 
 数据管理支持两种清理方式：
 
 - 点击数据源旁的 `×` 只移除该导入表或外部数据库连接。
-- “清空工作库”会删除当前工作库中的用户表、视图和外部连接；SQL、QMD、工作流和报告文件不会删除。
+- “清空工作库”会删除当前工作库中的用户表、视图和外部连接；SQL、QMD 和报告文件不会删除。
 
 工作区设置中的“导出工作库 `.duckdb`”会生成完整数据库快照，便于组合分析结果并作为发布数据交付。导出使用兼容存储版本，可供 R DuckDB 驱动和常见 DuckDB 客户端读取。
 
@@ -200,92 +195,43 @@ Windows 对应 `%APPDATA%\duckdb_report\settings.json`，Linux 对应 `${XDG_CON
 
 - CSV、JSON、Parquet、Excel 会进入工作库 `workspace.duckdb`，成为可查询表。
 - DuckDB 文件以外部 catalog 附加，不会复制数据库内容。
-- 导入完成后会创建数据源 Preset，并自动向当前工作流加入对应导入步骤。
+- 导入完成后直接生成可查询的数据表，不创建 Preset 或工作流步骤。
 
 ## QMD 运行时
 
 QMD 不一定需要 R 或 Python：
 
 - 纯 Markdown / HTML 报告不需要脚本运行时。
-- 使用 `{{table}}` 时，Go 后端先执行 SQL 并把结果表注入 QMD，不需要 R/Python。
 - 显式包含 ```` ```{r} ```` 代码块时，需要 Quarto 能找到 R/Rscript。
 - 显式包含 ```` ```{python} ```` 代码块时，需要 Python 与 Jupyter。
 - PDF 默认由 Quarto 内置 Typst 生成。
 - PDF 中文字体会根据 macOS、Windows 或 Linux 自动选择，也可用运行参数 `report_font` 覆盖。
 
 报告页会实时识别当前 QMD 的依赖；缺少运行时时会禁用渲染按钮并说明替代方案。
+QMD 可以通过 `{{database}}` 读取本次报告自动生成的只读 `analysis.duckdb` 快照。
 
-## Workflow 约定
+## 手工分析
 
-工作流保存在 `workflows/current.json`：
+桌面版的推荐路径不依赖 Workflow：
 
-- Preset 固化可复用参数，例如数据源、SQL 集合和报告模板。
-- Step 按顺序执行 `import`、`sql`、`render`、`export`。
-- 参数覆盖顺序为：运行参数 > Step overrides > Preset 默认值。
-- 模板变量统一使用 `{{name}}`。
-- QMD 中的 `{{table}}` 是保留插入点，报告渲染时替换为 SQL 查询结果表。
+1. 在 SQL 页选择或新建 `.sql` 源文件。
+2. 手工运行 SQL，并使用 `CREATE OR REPLACE TABLE` 将每个分析结果物化为可查询表。
+3. 检查结果与质量问题，确定报告需要展示的最终结果表。
+4. 选择 QMD，在脚本块中自行编写数据读取、计算和图表代码。
+5. 使用 `{{database}}` 连接本次报告快照，生成 HTML 或 PDF。
 
-SQL Preset 的 `mode` 参数支持：
-
-- `file`：从 `file` 读取工作区中的 `.sql` 文件，可通过“选择 SQL 文件”按钮选择。
-- `inline`：直接执行 `inline_sql` 中保存的完整 SQL，支持多条语句和 `.read`。
-- 未设置 `mode` 的旧 Preset 自动按 `file` 处理。
-
-工作流页面的“导出工作流包”会生成可迁移的 `.zip`：
-
-- `workflow.json` 保存 Preset、Step、运行参数和标题。
-- 引用的 SQL 文件会连同同目录脚本一起打包，以保留 `.read` 依赖。
-- QMD 会连同相邻 `assets/` 等资源一起打包。
-- 数据源 Preset 引用的 CSV、Excel、Parquet 或 DuckDB 文件会一并打包。
-
-导入时文件解压到 `workflows/imports/<id>/`，资源路径自动改写，并设置为当前工作流，不会覆盖已有的同名 SQL 或模板。
-
-报告发布包使用 `output` Preset 与 `export` Step 配置：
-
-- `filename`：ZIP 文件名，最终会自动附加本次工作流运行 ID。
-- `directory`：相对工作区的输出目录，默认 `exports`。
-- `include_report`：是否包含渲染生成的 HTML/PDF。
-- `include_database`：是否包含同一报告运行目录中的 `analysis.duckdb` 快照。
-- `include_source`：是否包含 `report.qmd` 与 `assets/`。
-
-`export` 必须位于 `render` 之后；如果没有前置渲染步骤，工作流会明确报错。该数据库快照可独立打开，不会打包正在被应用锁定的 `workspace.duckdb`。
-
-报告 Preset 可以配置多个命名查询，在同一份 QMD 中输出多张表：
+报告运行目录同时保留：
 
 ```text
-query           → {{table}}
-query_sales     → {{table_sales}}
-query_products  → {{table_products}}
+runs/<run-id>/
+  report.qmd
+  report.html 或 report.pdf
+  analysis.duckdb
+  quarto.log
+  assets/
 ```
 
-例如 `query_sales` 的值是 `SELECT * FROM sales_summary`，QMD 可以同时写：
-
-```markdown
-## 月度汇总
-
-{{table}}
-
-## 产品排名
-
-{{table_products}}
-```
-
-命名查询与正文占位符必须一一对应；缺少 `query_products` 时，渲染会直接指出缺失参数。
-
-示例 Preset：
-
-```json
-{
-  "id": "sql-monthly",
-  "type": "sqlset",
-  "name": "月度经营口径",
-  "params": {
-    "file": "sql/monthly_analysis.sql",
-    "query_file": "sql/monthly_result.sql",
-    "limit": "500"
-  }
-}
-```
+`workflows/current.json` 及 `workflow` CLI 命令继续保留，用于读取旧工作区和兼容已有自动化脚本；桌面导航、侧栏和检查器不再暴露工作流配置。
 
 ## 验证
 
@@ -298,13 +244,13 @@ make test
 
 当前测试覆盖：
 
-- Workflow 校验与参数优先级
+- 可选 Workflow 的兼容校验与参数优先级
 - `{{variable}}` 替换和路径越界防护
 - DuckDB 多语句查询
 - `.read` SQL 嵌套文件展开
 - Excel 导入
 - 报告表格 HTML 转义
-- `{{table}}` 注入顺序
+- 旧版 `{{table}}` 兼容注入顺序
 - 预览文件路由和目录穿越拦截
 - 报告数据库快照与数据库发布包
 - 跨平台 PDF 中文字体选择
@@ -312,8 +258,8 @@ make test
 ## Agent 协作
 
 推荐配合 [DuckDB SQL Analytics Skill](https://github.com/alexwoo79/skills_plugins/tree/main/codex-skills/duckdb-sql-analytics)
-使用。Skill 负责 SQL 口径、时间序列方法、工作区发现和 Workflow/QMD 校验；桌面程序
-提供实际的 DuckDB、Quarto 和发布包执行能力。
+使用。Skill 负责定位 SQL 源文件、确认数据表、物化分析结果和生成 QMD 报告；桌面程序
+提供实际的 DuckDB、Quarto 和结果审阅能力。
 
 安装 Skill：
 
@@ -324,14 +270,14 @@ cp -a skills_plugins/codex-skills/duckdb-sql-analytics \
   "${CODEX_HOME:-$HOME/.codex}/skills/"
 ```
 
-典型 Agent 工作流：
+典型 Agent 分析路径：
 
 ```text
 $duckdb-sql-analytics
-  → status / doctor
-  → 修改 SQL、QMD、workflows/current.json
-  → workflow validate
-  → workflow run --json
+  → 定位工作区与 SQL 源文件
+  → query 执行并物化各结果表
+  → 检查表、行数和质量问题
+  → render 生成 HTML/PDF
   → 用户按需在 GUI 审阅报告
 ```
 
@@ -340,15 +286,18 @@ $duckdb-sql-analytics
 ```bash
 duckdb-report-cli --workspace /path/to/workspace status --json
 duckdb-report-cli --workspace /path/to/workspace doctor --json
-duckdb-report-cli --workspace /path/to/workspace workflow validate --json
-duckdb-report-cli --workspace /path/to/workspace workflow run --json
+duckdb-report-cli --workspace /path/to/workspace query \
+  --file examples/monthly_sales/sql/03_pivot.sql --json
+duckdb-report-cli --workspace /path/to/workspace render \
+  --template examples/monthly_sales/reports/monthly_sales_python.qmd \
+  --query "SELECT * FROM region_category_pivot" --format html --json
 ```
 
-Agent 也可以直接生成或修改工作区中的：
+Agent 主要读写工作区中的：
 
-- `workflows/*.json`
 - `sql/*.sql`
 - `templates/*.qmd`
+- `runs/<run-id>/`
 
 CLI 适合自动化执行，GUI 适合人工审核、编辑和预览产物。运行前建议先检查
 SQL/QMD 权限，因为该工作台刻意保留了本地分析工具的完整表达能力。

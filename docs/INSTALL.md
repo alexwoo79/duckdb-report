@@ -13,8 +13,8 @@
 
 从 [Releases](https://github.com/alexwoo79/duckdb-report/releases) 下载对应压缩包：
 
-- `duckdb-report-v0.1.11-macos-universal.zip`
-- `duckdb-report-v0.1.11-windows-amd64.zip`
+- `duckdb-report-v2.0.1-macos-universal.zip`
+- `duckdb-report-v2.0.1-windows-amd64.zip`
 - `duckdb-report-v*-linux-amd64.zip`
 
 macOS：
@@ -140,8 +140,8 @@ tlmgr install collection-latexrecommended xecjk
 发布程序内嵌以下资源，用户不需要从源码目录复制：
 
 - Vue 前端生产构建。
-- `example/` 月度销售示例数据、SQL、QMD 和组合工作流。
-- `internal/workspace/starters/` 基础模板、SQL、示例销售数据和默认工作流。
+- `example/` 月度销售示例数据、SQL 和 QMD。
+- `internal/workspace/starters/` 基础模板、SQL、示例销售数据及可选旧版工作流兼容资产。
 - `build/appicon.png`、`build/appicon.icns` 与 `build/windows/icon.ico`。
 
 运行后产生的资源位于工作区：
@@ -150,7 +150,7 @@ tlmgr install collection-latexrecommended xecjk
 data/                 导入与示例数据
 sql/                  用户 SQL
 templates/            QMD 模板及 assets
-workflows/current.json
+workflows/current.json  # 仅旧版兼容，桌面版不展示配置页面
 runs/<run-id>/        报告、QMD、日志和 analysis.duckdb
 exports/              报告与数据库发布包
 workspace.duckdb      当前工作库
@@ -197,7 +197,7 @@ build/bin/duckdb_report.app
 构建 macOS Universal 包：
 
 ```bash
-wails build -platform darwin/universal
+wails build -platform darwin/universal -trimpath -ldflags="-s -w"
 ```
 
 Windows 原生构建：
@@ -225,7 +225,7 @@ build/bin/duckdb_report
 build/bin/duckdb-report-cli
 ```
 
-也可以直接运行 `GOTOOLCHAIN=go1.26.0 wails build -platform linux/amd64 -tags webkit2_41`。`make` 与 GitHub Actions 默认使用 WebKitGTK 4.1，并固定 Wails 2.13 已验证的 Go 1.26 工具链；若目标系统只有 WebKitGTK 4.0，可在 Linux 原生环境使用 `make build-linux LINUX_WEBKIT_TAGS=webkit2_40`。
+也可以直接运行 `GOTOOLCHAIN=go1.26.0 wails build -platform linux/amd64 -tags webkit2_41 -trimpath -ldflags="-s -w"`。`make` 与 GitHub Actions 默认使用 WebKitGTK 4.1，并固定 Wails 2.13 已验证的 Go 1.26 工具链；若目标系统只有 WebKitGTK 4.0，可在 Linux 原生环境使用 `make build-linux LINUX_WEBKIT_TAGS=webkit2_40`。
 
 构建独立 CLI：
 
@@ -238,13 +238,17 @@ make build-cli
 ```bash
 duckdb-report-cli --workspace /path/to/workspace status --json
 duckdb-report-cli --workspace /path/to/workspace doctor --json
-duckdb-report-cli --workspace /path/to/workspace workflow run --json
+duckdb-report-cli --workspace /path/to/workspace query \
+  --file examples/monthly_sales/sql/03_pivot.sql --json
+duckdb-report-cli --workspace /path/to/workspace render \
+  --template examples/monthly_sales/reports/monthly_sales_python.qmd \
+  --query "SELECT * FROM region_category_pivot" --format html --json
 ```
 
 CLI 与桌面应用不能同时写入同一个 `workspace.duckdb`。运行 CLI 前应关闭对应窗口。
 
-`doctor` 会检查工作流引用、Step 顺序、参数占位符、SQL 语法、QMD 表格映射、
-报告资源与运行时依赖。加入 `--explain` 会额外检查查询计划绑定；`--strict`
+`doctor` 会检查 SQL 语法、QMD 表格映射、报告资源与运行时依赖；旧工作区仍会额外
+校验 Workflow 引用和 Step 顺序。加入 `--explain` 会检查查询计划绑定；`--strict`
 会把 warning 作为失败返回。
 
 Agent 场景建议配合
@@ -276,16 +280,16 @@ LICENSE
 
 - Python 代码块需要 Python、Jupyter 和 `jupyter` 命令。
 - R 代码块需要 `Rscript`。
-- 只使用 `{{table}}` 的 QMD 由 Go 注入数据，不需要 R 或 Python。
+- QMD 可通过 `{{database}}` 读取本次报告自动生成的只读 `analysis.duckdb` 快照。
 
 ### PDF 中文显示为方框
 
-确认系统已安装 Microsoft YaHei、PingFang SC 或 Noto Sans CJK SC。也可以在报告工作流中增加运行参数：
+确认系统已安装 Microsoft YaHei、PingFang SC 或 Noto Sans CJK SC。也可以在 QMD 的
+`params` 或运行环境中覆盖字体：
 
-```json
-{
-  "report_font": "Noto Sans CJK SC"
-}
+```yaml
+params:
+  report_font: "Noto Sans CJK SC"
 ```
 
 ### Windows 无法启动

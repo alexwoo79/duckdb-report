@@ -1,6 +1,6 @@
 # 月度销售组合分析示例
 
-这套示例演示一条完整的数据分析流水线：
+这套示例演示一条手工可控的数据分析路径：
 
 ```text
 客户/产品/订单/订单明细子表
@@ -29,18 +29,17 @@
 
 日期使用 `{{start_date}}`、`{{end_date}}`，产品排名数量使用 `{{top_n}}`。
 
-## 工作流
+## 手工运行
 
-- `workflows/monthly_sales_python.json`：完整流水线并使用 Python/Jupyter 报告。
-- `workflows/monthly_sales_r.json`：相同分析口径并使用 R 报告。
+在桌面版 SQL 页按顺序打开并运行 `01_join.sql`、`02_summary.sql`、
+`03_pivot.sql` 和 `04_validation.sql`。每份 SQL 都会物化独立结果表，便于逐表检查。
 
-工作流包含：
+完成 SQL 后，在报告页：
 
-- 4 个 CSV 导入步骤。
-- 四表 Join。
-- 汇总和透视。
-- 勾稽验证。
-- Quarto 报告渲染。
+1. 选择 Python 或 R QMD。
+2. 在 QMD 脚本块中直接读取需要的结果表，分析、图表和表格代码全部写在 QMD 中。
+3. 使用 `{{database}}` 连接本次报告的 `analysis.duckdb` 快照。
+4. 生成 HTML 或 PDF。
 
 ## 报告
 
@@ -66,6 +65,6 @@
 examples/monthly_sales/
 ```
 
-可以在“工作流 → 导入工作流”中选择对应的 JSON 文件，或通过工作流包导入功能加载完整资产。
+`workflows/` 下的 JSON 仅为旧版兼容保留，桌面版不再展示工作流配置页面。
 
 Python 报告需要 Python、Jupyter 和 Matplotlib；R 报告需要 R、DBI、DuckDB、dplyr、ggplot2、knitr。

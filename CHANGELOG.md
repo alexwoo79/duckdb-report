@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.0.1 - 2026-11-20
+
+### Changed
+
+- Refocus the desktop interface on manual SQL analysis and report generation. Remove the Workflow entry point, Preset sidebar, workflow inspector, and workflow shortcuts while keeping the CLI-compatible backend for existing workspaces.
+- Keep report rendering free of preset data SQL; all analysis and chart code lives directly in the QMD script.
+- Make the data asset sidebar horizontally resizable, persist the selected width, and expose keyboard resizing plus double-click reset.
+
 ## v0.1.11 - 2026-11-19
 
 ### Changed

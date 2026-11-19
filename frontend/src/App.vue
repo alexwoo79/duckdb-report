@@ -57,7 +57,7 @@ const loading = ref(true);
 const fatalError = ref("");
 const state = ref<Bootstrap | null>(null);
 const workflow = ref<Workflow | null>(null);
-const activeView = ref<ViewName>("workflow");
+const activeView = ref<ViewName>("sql");
 const inspectorOpen = ref(true);
 const logsOpen = ref(true);
 const settingsBusy = ref(false);
@@ -84,11 +84,16 @@ const runs = computed(() => state.value?.runs ?? []);
 const presets = computed(() => workflow.value?.presets ?? []);
 const runtimeParams = computed(() => workflow.value?.runtime ?? {});
 
-const selectedSQL = ref("sql/monthly_analysis.sql");
+const selectedSQL = ref("");
 const sqlContent = ref("");
 const sqlResult = ref<QueryResult | null>(null);
 const sqlFilter = ref("");
-const selectedTemplate = ref("templates/monthly_report.qmd");
+const sqlParams = ref<Record<string, string>>({
+  start_date: "2026-01-01",
+  end_date: "2026-12-31",
+  top_n: "8",
+});
+const selectedTemplate = ref("");
 const reportContent = ref("");
 const reportFormat = ref<"html" | "pdf">("html");
 const reportBusyLabel = ref("正在渲染报告…");
@@ -102,10 +107,13 @@ const sqlEditorCollapsed = ref(false);
 const sqlResultCollapsed = ref(false);
 const reportEditorCollapsed = ref(false);
 const reportPreviewCollapsed = ref(false);
+const sidebarWidthStorageKey = "duckdb-report-sidebar-width";
+const sidebarWidth = ref(loadSidebarWidth());
 const sqlSplitRef = ref<HTMLElement | null>(null);
 const reportSplitRef = ref<HTMLElement | null>(null);
 const sqlCompletionTables = ref<SQLCompletionTable[]>([]);
 let stopSplitResize: (() => void) | undefined;
+let stopSidebarResize: (() => void) | undefined;
 const sqlDisplayName = computed(
   () => selectedSQL.value || "临时查询（未保存）",
 );
@@ -169,6 +177,17 @@ interface AssetDatabaseNode {
 }
 
 const treeExpansionStorageKey = "duckdb-report-database-tree-expansion";
+
+function loadSidebarWidth(): number {
+  const value = Number(localStorage.getItem(sidebarWidthStorageKey));
+  return Number.isFinite(value) && value >= 240 ? value : 264;
+}
+
+function clampSidebarWidth(width: number): number {
+  const inspectorWidth = inspectorOpen.value ? 294 : 0;
+  const available = window.innerWidth - 72 - inspectorWidth - 420;
+  return Math.round(Math.min(Math.max(240, available), 640, Math.max(240, width)));
+}
 
 function loadTreeExpansion(): Record<string, boolean> {
   try {
@@ -428,6 +447,42 @@ function nudgeSplit(kind: "sql" | "report", delta: number) {
   reportEditorRatio.value = Math.min(72, Math.max(28, reportEditorRatio.value + delta));
 }
 
+function beginSidebarResize(event: PointerEvent) {
+  stopSidebarResize?.();
+  const startX = event.clientX;
+  const startWidth = sidebarWidth.value;
+  const onMove = (moveEvent: PointerEvent) => {
+    sidebarWidth.value = clampSidebarWidth(startWidth + moveEvent.clientX - startX);
+  };
+  const onUp = () => {
+    window.removeEventListener("pointermove", onMove);
+    window.removeEventListener("pointerup", onUp);
+    window.removeEventListener("pointercancel", onUp);
+    document.body.classList.remove("is-resizing-sidebar");
+    localStorage.setItem(sidebarWidthStorageKey, String(sidebarWidth.value));
+    stopSidebarResize = undefined;
+  };
+  document.body.classList.add("is-resizing-sidebar");
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
+  stopSidebarResize = onUp;
+}
+
+function nudgeSidebar(delta: number) {
+  sidebarWidth.value = clampSidebarWidth(sidebarWidth.value + delta);
+  localStorage.setItem(sidebarWidthStorageKey, String(sidebarWidth.value));
+}
+
+function resetSidebarWidth() {
+  sidebarWidth.value = clampSidebarWidth(264);
+  localStorage.setItem(sidebarWidthStorageKey, String(sidebarWidth.value));
+}
+
+function handleWindowResize() {
+  sidebarWidth.value = clampSidebarWidth(sidebarWidth.value);
+}
+
 const workflowCompleted = computed(() => {
   if (!workflow.value) return 0;
   return workflow.value.steps.filter((step) => stepStates[step.id]?.status === "success").length;
@@ -437,6 +492,11 @@ const latestRun = computed(() => runs.value[0] ?? null);
 const brandPrimary = computed(
   () => state.value?.settings.displayName || "DuckDB Report Studio",
 );
+const activeDocumentLabel = computed(() => {
+  if (activeView.value === "report") return selectedTemplate.value || "临时报告";
+  if (activeView.value === "sql") return selectedSQL.value || "临时 SQL";
+  return "工作区";
+});
 const workspaceChangePending = computed(() =>
   Boolean(
     state.value?.settings.currentWorkspace &&
@@ -446,14 +506,13 @@ const workspaceChangePending = computed(() =>
 );
 const qmdUsesR = computed(() => /```\s*\{\s*r\b/i.test(reportContent.value));
 const qmdUsesPython = computed(() => /```\s*\{\s*python\b/i.test(reportContent.value));
-const qmdUsesDataBridge = computed(() => reportContent.value.includes("{{table}}"));
 const qmdNeedsJupyter = computed(() => qmdUsesPython.value);
 const qmdDependencyError = computed(() => {
   if (qmdUsesR.value && !state.value?.environment.rPath) {
-    return "当前 QMD 含 R 代码块，但未检测到 Rscript。请安装 R，或改用 {{table}} 数据注入。";
+    return "当前 QMD 含 R 代码块，但未检测到 Rscript。请安装 R 运行时。";
   }
   if (qmdNeedsJupyter.value && !state.value?.environment.jupyterAvailable) {
-    return "当前 QMD 含 Python 代码块，但未检测到 Jupyter。请完成 Quarto/Jupyter 配置，或改用 {{table}}。";
+    return "当前 QMD 含 Python 代码块，但未检测到 Jupyter。请完成 Quarto/Jupyter 配置。";
   }
   return "";
 });
@@ -868,6 +927,10 @@ async function loadInitial(): Promise<boolean> {
   try {
     const result = await backend().Bootstrap();
     state.value = result;
+    sqlParams.value = {
+      ...sqlParams.value,
+      ...(result.workflow?.runtime ?? {}),
+    };
     settingsDraft.value = {
       displayName: result.settings.displayName,
       workspace: result.settings.workspace,
@@ -879,13 +942,8 @@ async function loadInitial(): Promise<boolean> {
     previewUrl.value = "";
     previewError.value = "";
     for (const key of Object.keys(stepStates)) delete stepStates[key];
-    workflow.value = clone(result.workflow);
-    loadStepStates();
-    if (ensureWorkflowArchitecture()) {
-      await saveWorkflow(true);
-    }
     const firstSQL =
-      result.sqlFiles.find((file) => file.path === "sql/monthly_analysis.sql") ??
+      result.sqlFiles.find((file) => file.path === "examples/monthly_sales/sql/03_pivot.sql") ??
       result.sqlFiles[0];
     if (firstSQL) {
       selectedSQL.value = firstSQL.path;
@@ -896,7 +954,7 @@ async function loadInitial(): Promise<boolean> {
     }
     await loadSQLCompletions();
     const firstTemplate =
-      result.templates.find((file) => file.path === "templates/monthly_report.qmd") ??
+      result.templates.find((file) => file.path === "examples/monthly_sales/reports/monthly_sales_python.qmd") ??
       result.templates[0];
     if (firstTemplate) {
       selectedTemplate.value = firstTemplate.path;
@@ -1110,20 +1168,6 @@ async function confirmImport() {
     });
     importOpen.value = false;
     await refreshState();
-    const preset: Preset = {
-      id: `source-${Date.now().toString(36)}`,
-      type: "datasource",
-      name: baseName(importPath.value),
-      description: `已接入 ${imported.source.kind.toUpperCase()} · ${imported.source.table}`,
-      params: {
-        kind: imported.source.kind,
-        path: imported.source.path,
-        table: imported.source.table,
-        sheet: imported.source.sheet ?? "",
-      },
-    };
-    workflow.value?.presets.push(preset);
-    addPresetStep(preset);
     notify(`已导入 ${imported.source.table}`, "success");
     for (const line of imported.log) pushLog("success", line);
   } catch (error) {
@@ -1147,7 +1191,7 @@ async function removeSource(source: DataSource) {
   try {
     const catalog = await backend().DeleteSource(source);
     applyDataCatalog(catalog);
-    notify(`已移除数据源：${source.table}；工作流结构已保留`, "success");
+    notify(`已移除数据源：${source.table}`, "success");
   } catch (error) {
     notify(errorMessage(error), "error");
   } finally {
@@ -1163,7 +1207,7 @@ async function clearWorkspaceData() {
     applyDataCatalog(catalog);
     sqlResult.value = null;
     clearDataOpen.value = false;
-    notify("工作库中的数据已清空，工作流结构已保留", "success");
+    notify("工作库中的数据已清空", "success");
   } catch (error) {
     notify(errorMessage(error), "error");
   } finally {
@@ -1238,7 +1282,7 @@ async function runSQL(showNotification = true, queryOverride?: string) {
   sqlBusy.value = true;
   const started = performance.now();
   try {
-    const query = resolveTemplate(content, runtimeParams.value);
+    const query = resolveTemplate(content, sqlParams.value);
     sqlResult.value = await backend().RunSQL(query, 500, selectedSQL.value);
     pushLog(
       "success",
@@ -1269,7 +1313,7 @@ function explainSelectedSQL() {
   if (file.includes("validation")) return "验收 SQL：对关键行数和金额平衡执行断言。";
   if (file.includes("publish")) return "发布层：将分析视图物化为稳定结果表。";
   if (file.includes("pivot")) return "透视层：使用 GROUPING SETS 生成小计与总计。";
-  return "执行前会将 {{variables}} 替换为工作流运行参数。";
+  return "SQL 中的模板变量会先按当前工作区参数展开，再交给 DuckDB 执行。";
 }
 
 async function loadTemplate(path: string) {
@@ -1306,24 +1350,8 @@ async function newQMDFile() {
   await saveQMDAs();
 }
 
-function activeReportPreset(): Preset | undefined {
-  return presets.value.find((preset) => preset.type === "report");
-}
-
-function reportQuery(): string {
-  const reportPreset = activeReportPreset();
-  return reportPreset?.params.query ?? "SELECT * FROM monthly_summary";
-}
-
-function reportParams(): Record<string, string> {
-  return {
-    ...(activeReportPreset()?.params ?? {}),
-    ...runtimeParams.value,
-  };
-}
-
 async function renderReport(format: "html" | "pdf") {
-  if (!workflow.value || !reportContent.value.trim() || reportBusy.value) return;
+  if (!reportContent.value.trim() || reportBusy.value) return;
   if (qmdDependencyError.value) {
     notify(qmdDependencyError.value, "error");
     return;
@@ -1340,9 +1368,9 @@ async function renderReport(format: "html" | "pdf") {
     const result = await backend().RenderReport({
       content: reportContent.value,
       format,
-      query: reportQuery(),
-      params: reportParams(),
-      saveAs: workflow.value.name,
+      query: "",
+      params: sqlParams.value,
+      saveAs: selectedTemplate.value ? fileStem(selectedTemplate.value) : "analysis-report",
       templatePath: selectedTemplate.value,
     });
     renderResult.value = result;
@@ -1517,26 +1545,18 @@ watch(
   { immediate: true },
 );
 
-watch(
-  () => workflow.value?.name,
-  (name, previous) => {
-    if (!workflow.value || !name) return;
-    if (!workflow.value.runtime.title || workflow.value.runtime.title === previous) {
-      workflow.value.runtime.title = name;
-    }
-  },
-);
-
 onMounted(async () => {
   const savedTheme = localStorage.getItem("duckdb-report-theme");
   const preferredDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   setTheme(savedTheme === "light" || savedTheme === "dark" ? savedTheme : preferredDark ? "dark" : "light");
-  window.runtime?.EventsOn("workflow:event", onWorkflowEvent);
+  window.addEventListener("resize", handleWindowResize);
   await loadInitial();
 });
 
 onBeforeUnmount(() => {
   stopSplitResize?.();
+  stopSidebarResize?.();
+  window.removeEventListener("resize", handleWindowResize);
 });
 </script>
 
@@ -1550,9 +1570,9 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div class="titlebar-breadcrumb">
-        <span>{{ workflow?.name ?? "Workspace" }}</span>
+        <span>{{ activeDocumentLabel }}</span>
         <AppIcon name="chevron" :size="13" />
-        <strong>{{ activeView === "workflow" ? "工作流" : activeView === "sql" ? "SQL 分析" : activeView === "settings" ? "设置" : "报告预览" }}</strong>
+        <strong>{{ activeView === "sql" ? "SQL 分析" : activeView === "settings" ? "设置" : "报告生成" }}</strong>
       </div>
       <div class="titlebar-actions">
         <div class="runtime-pill" :class="{ ready: state?.environment.quartoPath }">
@@ -1592,6 +1612,7 @@ onBeforeUnmount(() => {
     <div
       v-else
       class="app-body"
+      :style="{ '--sidebar-width': `${sidebarWidth}px` }"
       :class="{
         'logs-visible': logsOpen,
         'settings-mode': activeView === 'settings',
@@ -1601,7 +1622,6 @@ onBeforeUnmount(() => {
       <nav class="activity-rail">
         <button
           v-for="item in [
-            { id: 'workflow', icon: 'workflow', label: '工作流' },
             { id: 'sql', icon: 'terminal', label: 'SQL' },
             { id: 'report', icon: 'report', label: '报告' },
           ]"
@@ -1784,36 +1804,24 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
-        <section class="side-section presets-section">
+        <section class="side-section analysis-flow-section">
           <div class="section-title">
-            <span>可组合 Preset</span>
-            <div class="section-actions">
-              <span class="count-badge">{{ presets.length }}</span>
-              <button class="text-button" @click="openNewPreset()">
-                <AppIcon name="plus" :size="13" /> 新建
-              </button>
-            </div>
+            <span>分析路径</span>
           </div>
-          <div class="preset-stack">
-            <div
-              v-for="preset in presets"
-              :key="preset.id"
-              class="preset-item"
-            >
-              <button class="preset-main" :title="`查看或编辑「${preset.name}」`" @click="openPreset(preset)">
-                <span class="preset-icon">
-                  <AppIcon :name="presetIcon(preset.type)" :size="16" />
-                </span>
-                <span class="preset-copy">
-                  <strong>{{ preset.name }}</strong>
-                  <small>{{ presetTypeLabel(preset.type) }} · {{ preset.params.table || preset.params.file || preset.params.template || "参数集" }}</small>
-                </span>
-              </button>
-              <button class="preset-add" :title="`添加「${preset.name}」步骤`" @click="addPresetStep(preset)">
-                <AppIcon name="plus" :size="14" />
-              </button>
-            </div>
-          </div>
+          <ol class="analysis-flow">
+            <li>
+              <span>01</span>
+              <div><strong>打开 SQL</strong><small>选择或新建源文件，确认输入表与结果表。</small></div>
+            </li>
+            <li>
+              <span>02</span>
+              <div><strong>手工运行</strong><small>逐段检查数据、质量问题和物化结果表。</small></div>
+            </li>
+            <li>
+              <span>03</span>
+              <div><strong>生成报告</strong><small>在 QMD 中编写分析代码，渲染 HTML 或 PDF。</small></div>
+            </li>
+          </ol>
         </section>
 
         <div class="sidebar-footer">
@@ -1821,6 +1829,22 @@ onBeforeUnmount(() => {
           <code>{{ state?.database }}</code>
         </div>
       </aside>
+
+      <div
+        class="sidebar-resizer"
+        role="separator"
+        aria-label="调整数据与分析资产栏宽度"
+        aria-orientation="vertical"
+        :aria-valuenow="sidebarWidth"
+        aria-valuemin="240"
+        aria-valuemax="640"
+        tabindex="0"
+        title="拖动调整宽度，双击恢复默认"
+        @pointerdown.prevent="beginSidebarResize"
+        @keydown.left.prevent="nudgeSidebar(-20)"
+        @keydown.right.prevent="nudgeSidebar(20)"
+        @dblclick="resetSidebarWidth"
+      ></div>
 
       <main class="main-workspace">
         <section v-if="activeView === 'workflow'" class="view-panel">
@@ -2011,6 +2035,18 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
+          <div v-if="Object.keys(sqlParams).length" class="sql-parameter-strip">
+            <span class="runtime-badge">SQL 参数</span>
+            <label v-for="(value, key) in sqlParams" :key="key">
+              <span>{{ key }}</span>
+              <input
+                v-model="sqlParams[key]"
+                :type="/^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? 'date' : 'text'"
+              />
+            </label>
+            <small>运行 SQL 和生成报告时共享这些参数。</small>
+          </div>
+
           <div
             ref="sqlSplitRef"
             class="sql-split-layout"
@@ -2094,7 +2130,7 @@ onBeforeUnmount(() => {
           <div class="page-head compact-head">
             <div>
               <span class="eyebrow">QUARTO COMPOSER</span>
-              <h1>报告预览</h1>
+              <h1>报告生成</h1>
             </div>
             <div class="page-actions">
               <select v-model="selectedTemplate" class="select-control wide" @change="loadTemplate(selectedTemplate)">
@@ -2126,9 +2162,8 @@ onBeforeUnmount(() => {
               <p v-if="qmdDependencyError">{{ qmdDependencyError }}</p>
               <p v-else-if="qmdUsesR">检测到 R 代码块，将使用 {{ state?.environment.rVersion || "Rscript" }} 执行。</p>
               <p v-else-if="qmdUsesPython">检测到 Python 代码块，将使用 Python + Jupyter 执行。</p>
-              <p v-else>当前模板没有 R/Python 代码块；正文可直接渲染。</p>
+              <p v-else>当前模板没有 R/Python 代码块；正文可直接渲染。数据分析代码应直接写在 QMD 中。</p>
             </div>
-            <span v-if="qmdUsesDataBridge" class="runtime-chip success">Go 注入 <code v-pre>{{table}}</code></span>
             <span v-if="qmdUsesR" class="runtime-chip" :class="{ success: state?.environment.rPath }">R</span>
             <span v-if="qmdUsesPython" class="runtime-chip" :class="{ success: state?.environment.jupyterAvailable }">Python / Jupyter</span>
           </div>
@@ -2284,7 +2319,7 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <p class="settings-description">
-                  DuckDB 工作库、SQL、QMD、工作流和报告产物都保存在工作区目录中。
+                  DuckDB 工作库、SQL、QMD 和报告产物都保存在工作区目录中。
                 </p>
                 <label class="form-field">
                   <span>工作区目录（选择后自动切换）</span>
@@ -2439,7 +2474,7 @@ onBeforeUnmount(() => {
               <span>{{ entry.time }}</span>
               <p>{{ entry.text }}</p>
             </div>
-            <div v-if="logs.length === 0" class="log-placeholder">运行 SQL、工作流或报告后，日志会出现在这里。</div>
+            <div v-if="logs.length === 0" class="log-placeholder">运行 SQL 或生成报告后，日志会出现在这里。</div>
           </div>
         </section>
       </main>
@@ -2547,8 +2582,8 @@ onBeforeUnmount(() => {
           <button class="shortcut-row" @click="activeView = 'sql'">
             <AppIcon name="terminal" :size="15" /><span>打开 SQL 编辑器</span><kbd>⌘ 2</kbd>
           </button>
-          <button class="shortcut-row" @click="runWorkflow">
-            <AppIcon name="play" :size="15" /><span>运行整条工作流</span><kbd>⌘ ↵</kbd>
+          <button class="shortcut-row" @click="activeView = 'report'">
+            <AppIcon name="report" :size="15" /><span>生成报告</span>
           </button>
         </section>
       </aside>
@@ -2566,11 +2601,11 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <p class="settings-description">
-          此操作会清空当前工作库中的用户表、视图和外部 DuckDB 连接。工作流、Preset、SQL、QMD 和报告文件都会保留。
+          此操作会清空当前工作库中的用户表、视图和外部 DuckDB 连接。SQL、QMD 和已生成的报告文件都会保留。
         </p>
         <ul class="destructive-list">
-          <li>Preset、步骤、SQL、QMD、工作流文件和已生成的报告不会删除。</li>
-          <li>之后运行工作流时，导入步骤会重新建立所需数据。</li>
+          <li>SQL、QMD 文件和已生成的报告不会删除。</li>
+          <li>重新运行 SQL 或导入数据后，可以再次建立所需结果表。</li>
           <li>外部 CSV/Excel/DuckDB 原文件不会删除。</li>
           <li>工作库中的分析中间表和结果表会被删除。</li>
         </ul>
@@ -2790,7 +2825,7 @@ onBeforeUnmount(() => {
         <div class="modal-actions">
           <button type="button" class="ghost-button" @click="importOpen = false">取消</button>
           <button type="submit" class="primary-button" :disabled="importBusy">
-            {{ importBusy ? "正在导入…" : "导入并加入工作流" }}
+            {{ importBusy ? "正在导入…" : "导入数据" }}
           </button>
         </div>
       </form>

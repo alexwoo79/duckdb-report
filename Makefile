@@ -2,7 +2,9 @@ WAILS ?= wails
 NPM ?= npm
 UNAME_S := $(shell uname -s)
 LINUX_WEBKIT_TAGS ?= webkit2_41
-LINUX_GO_TOOLCHAIN ?= go1.26.0
+GO_TOOLCHAIN ?= go1.26.0
+BUILD_LDFLAGS ?= -s -w
+export GOTOOLCHAIN := $(GO_TOOLCHAIN)
 CLI_NAME := duckdb-report-cli
 ifeq ($(OS),Windows_NT)
 CLI_NAME := duckdb-report-cli.exe
@@ -30,28 +32,24 @@ frontend:
 
 build:
 ifeq ($(UNAME_S),Darwin)
-	CGO_LDFLAGS="$${CGO_LDFLAGS:--mmacosx-version-min=13.0}" $(WAILS) build
+	CGO_LDFLAGS="$${CGO_LDFLAGS:--mmacosx-version-min=13.0}" $(WAILS) build -trimpath -ldflags="$(BUILD_LDFLAGS)"
 else ifeq ($(UNAME_S),Linux)
-	GOTOOLCHAIN="$(LINUX_GO_TOOLCHAIN)" $(WAILS) build -tags "$(LINUX_WEBKIT_TAGS)"
+	$(WAILS) build -trimpath -ldflags="$(BUILD_LDFLAGS)" -tags "$(LINUX_WEBKIT_TAGS)"
 else
-	$(WAILS) build
+	$(WAILS) build -trimpath -ldflags="$(BUILD_LDFLAGS)"
 endif
 
 build-cli:
-	go build -trimpath -ldflags="-s -w" -o "build/bin/$(CLI_NAME)" ./cmd/duckdb-report-cli
+	go build -trimpath -ldflags="$(BUILD_LDFLAGS)" -o "build/bin/$(CLI_NAME)" ./cmd/duckdb-report-cli
 
 build-linux:
-	GOTOOLCHAIN="$(LINUX_GO_TOOLCHAIN)" $(WAILS) build -platform linux/amd64 -tags "$(LINUX_WEBKIT_TAGS)"
+	$(WAILS) build -platform linux/amd64 -trimpath -ldflags="$(BUILD_LDFLAGS)" -tags "$(LINUX_WEBKIT_TAGS)"
 
 build-windows:
-	$(WAILS) build -platform windows/amd64
+	$(WAILS) build -platform windows/amd64 -trimpath -ldflags="$(BUILD_LDFLAGS)"
 
 dev:
-ifeq ($(UNAME_S),Linux)
-	GOTOOLCHAIN="$(LINUX_GO_TOOLCHAIN)" $(WAILS) dev
-else
 	$(WAILS) dev
-endif
 
 run: build
 ifeq ($(UNAME_S),Darwin)
