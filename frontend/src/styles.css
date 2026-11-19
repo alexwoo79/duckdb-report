@@ -1519,51 +1519,6 @@ p {
   overflow: hidden;
 }
 
-.sql-parameter-strip {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
-  margin-bottom: 9px;
-  padding: 7px 10px;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  background: var(--panel);
-}
-
-.sql-parameter-strip label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.sql-parameter-strip label > span {
-  color: var(--subtle);
-  font: calc(8px * var(--ui-font-scale)) var(--mono);
-}
-
-.sql-parameter-strip input {
-  width: 112px;
-  height: 27px;
-  padding: 0 7px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  outline: none;
-  color: var(--text);
-  background: var(--panel-2);
-  font: calc(9px * var(--ui-font-scale)) var(--mono);
-}
-
-.sql-parameter-strip input:focus {
-  border-color: color-mix(in srgb, var(--orange) 55%, var(--border));
-}
-
-.sql-parameter-strip small {
-  margin-left: auto;
-  color: var(--subtle);
-  font-size: calc(8px * var(--ui-font-scale));
-}
-
 .sql-split-layout {
   min-height: 0;
   flex: 1 1 auto;

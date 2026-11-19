@@ -156,6 +156,14 @@ func TestSaveSettingsSwitchesWorkspace(t *testing.T) {
 	if !sameFilePath(info.CurrentWorkspace, newRoot) {
 		t.Fatalf("settings current workspace = %q, want %q", info.CurrentWorkspace, newRoot)
 	}
+	for _, name := range []string{"data", "sql", "templates", "workflows", "runs"} {
+		if _, err := os.Stat(filepath.Join(newRoot, name)); !os.IsNotExist(err) {
+			t.Fatalf("custom workspace scaffold %q was created: %v", name, err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(newRoot, "workflows", "current.json")); !os.IsNotExist(err) {
+		t.Fatalf("custom workspace workflow was created: %v", err)
+	}
 	if _, err := app.database.Query(t.Context(), "SELECT 1", 1); err != nil {
 		t.Fatalf("query switched workspace: %v", err)
 	}

@@ -122,7 +122,13 @@ type cliRuntime struct {
 }
 
 func openRuntime(ctx context.Context, exampleFS fs.FS, root string) (*cliRuntime, error) {
-	store, err := workspace.New(root, exampleFS)
+	var store *workspace.Store
+	var err error
+	if isDefaultWorkspace(root) {
+		store, err = workspace.New(root, exampleFS)
+	} else {
+		store, err = workspace.Open(root, exampleFS)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -153,6 +159,20 @@ func openRuntime(ctx context.Context, exampleFS fs.FS, root string) (*cliRuntime
 		renderer: renderer,
 		runner:   runner.New(store, db, renderer),
 	}, nil
+}
+
+func isDefaultWorkspace(root string) bool {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return false
+	}
+	defaultRoot := filepath.Join(configDir, "duckdb_report")
+	rootInfo, rootErr := os.Stat(root)
+	defaultInfo, defaultErr := os.Stat(defaultRoot)
+	if rootErr == nil && defaultErr == nil {
+		return os.SameFile(rootInfo, defaultInfo)
+	}
+	return filepath.Clean(root) == filepath.Clean(defaultRoot)
 }
 
 func (r *cliRuntime) Close() error {

@@ -24,7 +24,7 @@
 - 报告页不预设数据 SQL；Python、R、图表和最终表格代码全部由用户在 QMD 中维护。
 - 报告同时保留 QMD、HTML/PDF、日志与 `analysis.duckdb` 快照，便于审阅和复用。
 - macOS、Windows 与 Linux 发布包支持原生桌面运行，界面沿用 `duckui_notebook` 的图标与视觉风格。
-- 使用 `{{variable}}` 在 SQL 与 QMD 中共享参数。
+- SQL 直接按编辑器内容执行，不维护额外参数栏；报告通过 `{{database}}` 接收只读快照。
 - SQL 与报告执行日志、独立产物目录和最近产物入口。
 - 设置页可修改应用显示名、目标工作区和主题，并查看报告运行时状态。
 - 工作区可导出为独立 `.duckdb` 发布快照，使用 R DuckDB 驱动可读取的兼容存储格式。
@@ -163,7 +163,7 @@ workspace.duckdb
 data/
 sql/
 templates/
-workflows/current.json
+workflows/current.json  # 可选，仅旧版工作流兼容
 runs/<run-id>/report.qmd
 runs/<run-id>/report.html
 runs/<run-id>/report.pdf
@@ -172,7 +172,7 @@ exports/<package-name>.zip
 examples/monthly_sales/
 ```
 
-首次启动会复制内置示例和 `example/` 中的月度销售组合分析样例，不覆盖已存在的用户文件。
+只有应用默认工作区会在首次启动时复制内置示例和月度销售样例。通过设置页选择的任意工作区不会被识别为示例工作区；应用只会在该目录创建按需使用的 `workspace.duckdb`，不会预建 `data/sql/templates/workflows/runs` 目录，也不会生成 `workflows/current.json`。
 
 设置保存在独立文件：
 
@@ -182,7 +182,7 @@ examples/monthly_sales/
 
 Windows 对应 `%APPDATA%\duckdb_report\settings.json`，Linux 对应 `${XDG_CONFIG_HOME:-~/.config}/duckdb_report/settings.json`。
 
-设置页保存新的工作区目录后会立即切换，并重新加载 SQL、QMD、数据库表和报告产物。已有工作区只读取现有内容，不会注入内置示例；全新的空目录和默认工作区会初始化示例资产。现有工作区数据不会自动迁移，需要时自行复制目录。通过 `DUCKDB_REPORT_HOME` 启动时，环境变量优先于设置文件中的工作区。
+设置页保存新的工作区目录后会立即切换，并重新加载 SQL、QMD、数据库表和报告产物。用户选择的工作区只读取现有内容，不会注入内置示例、工作流或目录骨架；SQL、模板和报告目录只在用户保存或生成产物时按需创建。只有应用默认工作区会初始化示例资产。现有工作区数据不会自动迁移，需要时自行复制目录。通过 `DUCKDB_REPORT_HOME` 启动时，环境变量优先于设置文件中的工作区。
 
 数据管理支持两种清理方式：
 
@@ -205,7 +205,7 @@ QMD 不一定需要 R 或 Python：
 - 显式包含 ```` ```{r} ```` 代码块时，需要 Quarto 能找到 R/Rscript。
 - 显式包含 ```` ```{python} ```` 代码块时，需要 Python 与 Jupyter。
 - PDF 默认由 Quarto 内置 Typst 生成。
-- PDF 中文字体会根据 macOS、Windows 或 Linux 自动选择，也可用运行参数 `report_font` 覆盖。
+- PDF 中文字体会根据 macOS、Windows 或 Linux 自动选择，也可在 QMD 的 `params` 中覆盖。
 
 报告页会实时识别当前 QMD 的依赖；缺少运行时时会禁用渲染按钮并说明替代方案。
 QMD 可以通过 `{{database}}` 读取本次报告自动生成的只读 `analysis.duckdb` 快照。

@@ -72,8 +72,15 @@ func TestOpenDoesNotSeedStarterAssets(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := store.LoadWorkflow(); err != nil {
-				t.Fatalf("load default workflow: %v", err)
+			current, err := store.LoadWorkflow()
+			if err != nil {
+				t.Fatalf("load optional workflow: %v", err)
+			}
+			if current.ID != "workspace" {
+				t.Fatalf("workflow id = %q, want workspace", current.ID)
+			}
+			if _, err := os.Stat(store.WorkflowFile); !os.IsNotExist(err) {
+				t.Fatalf("workflow file was created: %v", err)
 			}
 			if _, err := os.Stat(filepath.Join(store.Data, "sales.csv")); !os.IsNotExist(err) {
 				t.Fatalf("starter data was seeded: %v", err)
@@ -90,6 +97,51 @@ func TestOpenDoesNotSeedStarterAssets(t *testing.T) {
 				t.Fatalf("starter example was seeded: %v", err)
 			}
 		})
+	}
+}
+
+func TestOpenDoesNotCreateWorkspaceScaffolding(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	store, err := Open(root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, directory := range []string{
+		store.Data,
+		store.SQL,
+		store.Templates,
+		store.Workflows,
+		store.Runs,
+	} {
+		if _, err := os.Stat(directory); !os.IsNotExist(err) {
+			t.Fatalf("workspace directory %q was created: %v", directory, err)
+		}
+	}
+	if _, err := os.Stat(store.Database); !os.IsNotExist(err) {
+		t.Fatalf("workspace database was created by store open: %v", err)
+	}
+
+	runs, err := store.ListRuns()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(runs) != 0 {
+		t.Fatalf("runs = %#v, want empty", runs)
+	}
+	workflows, err := store.ListWorkflows()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(workflows) != 0 {
+		t.Fatalf("workflows = %#v, want empty", workflows)
+	}
+
+	if err := store.SaveWorkflow(workflow.DefaultWorkflow()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(store.WorkflowFile); err != nil {
+		t.Fatalf("explicit workflow save did not create its directory: %v", err)
 	}
 }
 

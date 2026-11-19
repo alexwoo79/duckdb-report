@@ -71,13 +71,6 @@ func NewApp(exampleFS fs.FS) *App {
 		root = configRoot
 	}
 	seedData := sameFilePath(root, configRoot)
-	if !seedData {
-		seedData, err = workspace.IsEmpty(root)
-		if err != nil {
-			app.initErr = err
-			return app
-		}
-	}
 	var store *workspace.Store
 	if seedData {
 		store, err = workspace.New(root, exampleFS)
@@ -372,12 +365,6 @@ func (a *App) SaveSettings(value model.AppSettings) (model.SettingsInfo, error) 
 	nextSeedData := a.seedData
 	if switchWorkspace {
 		seedData := sameFilePath(workspaceRoot, a.defaultWorkspace)
-		if !seedData {
-			seedData, err = workspace.IsEmpty(workspaceRoot)
-			if err != nil {
-				return model.SettingsInfo{}, err
-			}
-		}
 		ctx, cancel := context.WithTimeout(a.operationContext(), 5*time.Minute)
 		prepared, prepareErr := openWorkspaceRuntime(ctx, workspaceRoot, a.exampleFS, a.quarto, seedData)
 		cancel()

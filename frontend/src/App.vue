@@ -17,7 +17,6 @@ import {
   fileKind,
   fileStem,
   formatTime,
-  resolveTemplate,
 } from "./api";
 import type {
   AppSettings,
@@ -88,11 +87,6 @@ const selectedSQL = ref("");
 const sqlContent = ref("");
 const sqlResult = ref<QueryResult | null>(null);
 const sqlFilter = ref("");
-const sqlParams = ref<Record<string, string>>({
-  start_date: "2026-01-01",
-  end_date: "2026-12-31",
-  top_n: "8",
-});
 const selectedTemplate = ref("");
 const reportContent = ref("");
 const reportFormat = ref<"html" | "pdf">("html");
@@ -927,10 +921,6 @@ async function loadInitial(): Promise<boolean> {
   try {
     const result = await backend().Bootstrap();
     state.value = result;
-    sqlParams.value = {
-      ...sqlParams.value,
-      ...(result.workflow?.runtime ?? {}),
-    };
     settingsDraft.value = {
       displayName: result.settings.displayName,
       workspace: result.settings.workspace,
@@ -1282,8 +1272,7 @@ async function runSQL(showNotification = true, queryOverride?: string) {
   sqlBusy.value = true;
   const started = performance.now();
   try {
-    const query = resolveTemplate(content, sqlParams.value);
-    sqlResult.value = await backend().RunSQL(query, 500, selectedSQL.value);
+    sqlResult.value = await backend().RunSQL(content, 500, selectedSQL.value);
     pushLog(
       "success",
       `SQL 完成 · ${sqlResult.value.rowCount} 行 · ${Math.round(performance.now() - started)} ms`,
@@ -1369,7 +1358,7 @@ async function renderReport(format: "html" | "pdf") {
       content: reportContent.value,
       format,
       query: "",
-      params: sqlParams.value,
+      params: {},
       saveAs: selectedTemplate.value ? fileStem(selectedTemplate.value) : "analysis-report",
       templatePath: selectedTemplate.value,
     });
@@ -2035,18 +2024,6 @@ onBeforeUnmount(() => {
             </div>
           </div>
 
-          <div v-if="Object.keys(sqlParams).length" class="sql-parameter-strip">
-            <span class="runtime-badge">SQL 参数</span>
-            <label v-for="(value, key) in sqlParams" :key="key">
-              <span>{{ key }}</span>
-              <input
-                v-model="sqlParams[key]"
-                :type="/^\d{4}-\d{2}-\d{2}$/.test(String(value)) ? 'date' : 'text'"
-              />
-            </label>
-            <small>运行 SQL 和生成报告时共享这些参数。</small>
-          </div>
-
           <div
             ref="sqlSplitRef"
             class="sql-split-layout"
@@ -2319,7 +2296,7 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
                 <p class="settings-description">
-                  DuckDB 工作库、SQL、QMD 和报告产物都保存在工作区目录中。
+                  自定义工作区只创建按需使用的 DuckDB 工作库；SQL、QMD、报告和旧版工作流目录会在实际写入时创建。
                 </p>
                 <label class="form-field">
                   <span>工作区目录（选择后自动切换）</span>

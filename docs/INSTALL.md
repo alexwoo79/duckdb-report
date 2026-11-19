@@ -13,8 +13,8 @@
 
 从 [Releases](https://github.com/alexwoo79/duckdb-report/releases) 下载对应压缩包：
 
-- `duckdb-report-v2.0.1-macos-universal.zip`
-- `duckdb-report-v2.0.1-windows-amd64.zip`
+- `duckdb-report-v2.0.2-macos-universal.zip`
+- `duckdb-report-v2.0.2-windows-amd64.zip`
 - `duckdb-report-v*-linux-amd64.zip`
 
 macOS：
@@ -50,13 +50,17 @@ Linux：
    ./duckdb_report
    ```
 
-应用首次启动后会在以下目录创建工作区：
+应用默认工作区位于：
 
 ```text
 macOS:   ~/Library/Application Support/duckdb_report
 Windows: %APPDATA%\duckdb_report
 Linux:   ${XDG_CONFIG_HOME:-~/.config}/duckdb_report
 ```
+
+只有该默认工作区会初始化示例数据、SQL、模板和旧版工作流文件。通过设置页选择的其它目录
+不会生成目录骨架或 `workflows/current.json`；`workspace.duckdb`、SQL、QMD、报告和运行
+目录只在实际需要时按需创建。
 
 可以通过设置页切换工作区，或使用环境变量临时覆盖：
 
@@ -126,7 +130,7 @@ Quarto 使用内置 Typst 生成 PDF，不强制安装 LaTeX。PDF 可使用与�
 - Windows：Microsoft YaHei
 - Linux：Noto Sans CJK SC
 
-应用会把当前系统对应的字体名注入报告模板。若系统缺少建议字体，请安装 `Noto Sans CJK SC` 或设置工作流运行参数 `report_font` 覆盖默认字体。
+应用会把当前系统对应的字体名注入报告模板。若系统缺少建议字体，请安装 `Noto Sans CJK SC`，或在 QMD 的 `params` 中设置 `report_font`。
 
 只有自定义 XeLaTeX/LaTeX 模板才需要 TeX 发行版。Linux 可安装用户级 TinyTeX 与中文排版包：
 

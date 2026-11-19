@@ -82,10 +82,8 @@ func newStore(root string, exampleFS fs.FS, seedData bool) (*Store, error) {
 		WorkflowFile:    filepath.Join(absolute, "workflows", "current.json"),
 		IncludeExamples: seedData,
 	}
-	for _, directory := range []string{store.Data, store.SQL, store.Templates, store.Workflows, store.Runs} {
-		if err := os.MkdirAll(directory, 0o755); err != nil {
-			return nil, fmt.Errorf("create workspace directory %q: %w", directory, err)
-		}
+	if err := os.MkdirAll(absolute, 0o755); err != nil {
+		return nil, fmt.Errorf("create workspace root %q: %w", absolute, err)
 	}
 
 	seed, err := fs.Sub(starterFS, "starters")
@@ -93,6 +91,11 @@ func newStore(root string, exampleFS fs.FS, seedData bool) (*Store, error) {
 		return nil, fmt.Errorf("open starter assets: %w", err)
 	}
 	if seedData {
+		for _, directory := range []string{store.Data, store.SQL, store.Templates, store.Workflows, store.Runs} {
+			if err := os.MkdirAll(directory, 0o755); err != nil {
+				return nil, fmt.Errorf("create workspace directory %q: %w", directory, err)
+			}
+		}
 		if err := copyMissing(seed, absolute); err != nil {
 			return nil, err
 		}
@@ -102,10 +105,10 @@ func newStore(root string, exampleFS fs.FS, seedData bool) (*Store, error) {
 				return nil, err
 			}
 		}
-	}
-	if _, err := os.Stat(store.WorkflowFile); errors.Is(err, os.ErrNotExist) {
-		if err := store.SaveWorkflow(workflow.DefaultWorkflow()); err != nil {
-			return nil, err
+		if _, err := os.Stat(store.WorkflowFile); errors.Is(err, os.ErrNotExist) {
+			if err := store.SaveWorkflow(workflow.DefaultWorkflow()); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if !seedData {
@@ -121,6 +124,16 @@ func newStore(root string, exampleFS fs.FS, seedData bool) (*Store, error) {
 
 func (s *Store) LoadWorkflow() (model.Workflow, error) {
 	data, err := os.ReadFile(s.WorkflowFile)
+	if errors.Is(err, os.ErrNotExist) {
+		return model.Workflow{
+			ID:          "workspace",
+			Name:        "Workspace",
+			Description: "",
+			Runtime:     map[string]string{},
+			Presets:     []model.Preset{},
+			Steps:       []model.Step{},
+		}, nil
+	}
 	if err != nil {
 		return model.Workflow{}, fmt.Errorf("read workflow: %w", err)
 	}
@@ -141,6 +154,9 @@ func (s *Store) SaveWorkflow(value model.Workflow) error {
 	data, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
 		return fmt.Errorf("encode workflow: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(s.WorkflowFile), 0o755); err != nil {
+		return fmt.Errorf("create workflow directory: %w", err)
 	}
 	if err := os.WriteFile(s.WorkflowFile, append(data, '\n'), 0o644); err != nil {
 		return fmt.Errorf("write workflow: %w", err)
@@ -359,6 +375,9 @@ func removeLegacySeedFiles(store *Store, seed fs.FS) error {
 func legacySeedReferences(store *Store, paths []string) (map[string]bool, error) {
 	referenced := make(map[string]bool, len(paths))
 	entries, err := os.ReadDir(store.Workflows)
+	if errors.Is(err, os.ErrNotExist) {
+		return referenced, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("read workspace workflows: %w", err)
 	}
@@ -385,6 +404,9 @@ func (s *Store) ListWorkflows() ([]model.FileRef, error) {
 
 func (s *Store) ListRuns() ([]model.RunInfo, error) {
 	entries, err := os.ReadDir(s.Runs)
+	if errors.Is(err, os.ErrNotExist) {
+		return []model.RunInfo{}, nil
+	}
 	if err != nil {
 		return nil, fmt.Errorf("read report runs: %w", err)
 	}
@@ -640,6 +662,9 @@ func upgradeLegacyDefaults(store *Store, seed fs.FS) error {
 
 	currentWorkflow, err := os.ReadFile(store.WorkflowFile)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
 		return fmt.Errorf("inspect workflow for upgrades: %w", err)
 	}
 	legacyQuery := "SELECT * FROM monthly_summary ORDER BY month, region, product"

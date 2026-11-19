@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.2 - 2026-11-20
+
+### Fixed
+
+- Treat only the application default directory as a seeded workspace. User-selected workspaces no longer receive starter folders or `workflows/current.json`; optional directories are created only when files or reports are written.
+- Remove the SQL parameter strip so SQL executes exactly as edited and report rendering does not inject preset parameters.
+
 ## v2.0.1 - 2026-11-20
 
 ### Changed
