@@ -112,9 +112,11 @@ uv pip install --python ~/.local/share/duckdb-report/jupyter/bin/python \
 ```r
 install.packages(c(
   "DBI", "duckdb", "dplyr", "ggplot2",
-  "knitr", "scales", "rmarkdown"
+  "knitr", "ragg", "scales", "rmarkdown"
 ))
 ```
+
+R 样例通过 `ragg_png` 图形设备生成图表，不依赖 XQuartz、`libSM` 或 Cairo DLL。
 
 验证：
 
@@ -284,7 +286,7 @@ LICENSE
 
 - Python 代码块需要 Python、Jupyter 和 `jupyter` 命令。
 - R 代码块需要 `Rscript`。
-- QMD 可通过 `{{database}}` 读取本次报告自动生成的只读 `analysis.duckdb` 快照。
+- QMD 在报告运行目录中直接读取自动生成的只读 `analysis.duckdb` 快照。
 
 ### PDF 中文显示为方框
 

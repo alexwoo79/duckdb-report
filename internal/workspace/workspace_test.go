@@ -3,6 +3,7 @@ package workspace
 import (
 	"crypto/sha256"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,6 +35,32 @@ func TestNewSeedsWorkspace(t *testing.T) {
 	}
 	if len(sqlFiles) < 2 {
 		t.Fatalf("seeded SQL files = %#v", sqlFiles)
+	}
+}
+
+func TestStarterSQLIsSelfContained(t *testing.T) {
+	t.Parallel()
+	content, err := fs.ReadFile(starterFS, "starters/sql/monthly_analysis.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(content), "{{") {
+		t.Fatal("starter SQL still requires an external preset parameter")
+	}
+}
+
+func TestObsoleteStarterQMDIsNotSeeded(t *testing.T) {
+	t.Parallel()
+	_, err := fs.ReadFile(starterFS, "starters/templates/monthly_report.qmd")
+	if !os.IsNotExist(err) {
+		t.Fatalf("obsolete starter QMD is still embedded: %v", err)
+	}
+	store, err := New(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(store.Templates, "monthly_report.qmd")); !os.IsNotExist(err) {
+		t.Fatalf("obsolete starter QMD was seeded: %v", err)
 	}
 }
 
@@ -126,15 +153,29 @@ func TestOpenDoesNotCreateWorkspaceScaffolding(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(runs) != 0 {
-		t.Fatalf("runs = %#v, want empty", runs)
+	if runs == nil || len(runs) != 0 {
+		t.Fatalf("runs = %#v, want non-nil empty slice", runs)
 	}
 	workflows, err := store.ListWorkflows()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(workflows) != 0 {
-		t.Fatalf("workflows = %#v, want empty", workflows)
+	if workflows == nil || len(workflows) != 0 {
+		t.Fatalf("workflows = %#v, want non-nil empty slice", workflows)
+	}
+	sqlFiles, err := store.ListSQL()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sqlFiles == nil || len(sqlFiles) != 0 {
+		t.Fatalf("SQL files = %#v, want non-nil empty slice", sqlFiles)
+	}
+	templates, err := store.ListTemplates()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if templates == nil || len(templates) != 0 {
+		t.Fatalf("templates = %#v, want non-nil empty slice", templates)
 	}
 
 	if err := store.SaveWorkflow(workflow.DefaultWorkflow()); err != nil {
@@ -142,6 +183,69 @@ func TestOpenDoesNotCreateWorkspaceScaffolding(t *testing.T) {
 	}
 	if _, err := os.Stat(store.WorkflowFile); err != nil {
 		t.Fatalf("explicit workflow save did not create its directory: %v", err)
+	}
+}
+
+func TestNewUpgradesLegacyBundledExamples(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	reportDir := filepath.Join(root, "examples", "monthly_sales", "reports")
+	sqlDir := filepath.Join(root, "examples", "monthly_sales", "sql")
+	if err := os.MkdirAll(reportDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(sqlDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacyReport := `---
+title: "{{title}}"
+subtitle: "R / DuckDB 组合分析报告"
+format:
+  typst:
+    mainfont: "PingFang SC"
+---
+
+` + "```{r}\n" + `database_path <- "{{database}}"
+top_n <- as.integer("{{top_n}}")
+` + "```\n"
+	if err := os.WriteFile(filepath.Join(reportDir, "monthly_sales_r.qmd"), []byte(legacyReport), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	legacySQL := "SELECT *\nFROM order_detail\nWHERE order_date BETWEEN DATE '{{start_date}}' AND DATE '{{end_date}}';\n"
+	if err := os.WriteFile(filepath.Join(sqlDir, "02_summary.sql"), []byte(legacySQL), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	exampleFS := fstest.MapFS{
+		"example/sql/run_all.sql": &fstest.MapFile{Data: []byte(".read 01_join.sql\n")},
+	}
+
+	store, err := New(root, exampleFS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := os.ReadFile(filepath.Join(reportDir, "monthly_sales_r.qmd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportText := string(report)
+	for _, expected := range []string{"dev: ragg_png", `database_path <- "analysis.duckdb"`, "top_n <- 8L"} {
+		if !strings.Contains(reportText, expected) {
+			t.Fatalf("upgraded R sample is missing %q:\n%s", expected, reportText)
+		}
+	}
+	if strings.Contains(reportText, "{{") {
+		t.Fatalf("upgraded R sample still contains template parameters:\n%s", reportText)
+	}
+	sqlContent, err := os.ReadFile(filepath.Join(sqlDir, "02_summary.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sqlText := string(sqlContent)
+	if !strings.Contains(sqlText, "analysis_params") || strings.Contains(sqlText, "{{") {
+		t.Fatalf("upgraded SQL sample is invalid:\n%s", sqlText)
+	}
+	if _, err := os.Stat(filepath.Join(store.Root, "examples", "monthly_sales", "sql", "run_all.sql")); err != nil {
+		t.Fatalf("run_all.sql was not installed: %v", err)
 	}
 }
 
@@ -244,7 +348,7 @@ func TestClearSourcesReturnsEmptySlice(t *testing.T) {
 	}
 }
 
-func TestNewUpgradesLegacyPrintableTemplate(t *testing.T) {
+func TestNewRemovesLegacyPrintableTemplate(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	templateDir := filepath.Join(root, "templates")
@@ -259,16 +363,12 @@ func TestNewUpgradesLegacyPrintableTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	upgraded, err := os.ReadFile(filepath.Join(store.Templates, "monthly_report.qmd"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(upgraded), `mainfont: "{{report_font}}"`) {
-		t.Fatalf("legacy template was not upgraded: %s", upgraded)
+	if _, err := os.Stat(filepath.Join(store.Templates, "monthly_report.qmd")); !os.IsNotExist(err) {
+		t.Fatalf("legacy template was not removed: %v", err)
 	}
 }
 
-func TestNewUpgradesFixedMacFontInExistingTemplate(t *testing.T) {
+func TestNewRemovesObsoleteStarterTemplateWithFixedFont(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	templateDir := filepath.Join(root, "templates")
@@ -283,12 +383,8 @@ func TestNewUpgradesFixedMacFontInExistingTemplate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	upgraded, err := os.ReadFile(filepath.Join(store.Templates, "monthly_report.qmd"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(upgraded), `mainfont: "{{report_font}}"`) {
-		t.Fatalf("fixed report font was not upgraded: %s", upgraded)
+	if _, err := os.Stat(filepath.Join(store.Templates, "monthly_report.qmd")); !os.IsNotExist(err) {
+		t.Fatalf("obsolete starter template was not removed: %v", err)
 	}
 }
 

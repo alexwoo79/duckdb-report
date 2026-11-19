@@ -841,7 +841,7 @@ function ensureWorkflowArchitecture(): boolean {
       name: "基础报告模板",
       description: "恢复的 Quarto 报告模板",
       params: {
-        template: "templates/monthly_report.qmd",
+        template: "examples/monthly_sales/reports/monthly_sales_python.qmd",
         format: "html",
         query: "SELECT strftime(month, '%Y-%m') AS month, region, product, orders, revenue, cost, gross_profit, gross_margin_pct FROM monthly_summary ORDER BY month, region, product",
       },
@@ -932,9 +932,10 @@ async function loadInitial(): Promise<boolean> {
     previewUrl.value = "";
     previewError.value = "";
     for (const key of Object.keys(stepStates)) delete stepStates[key];
+    const availableSQLFiles = result.sqlFiles ?? [];
     const firstSQL =
-      result.sqlFiles.find((file) => file.path === "examples/monthly_sales/sql/03_pivot.sql") ??
-      result.sqlFiles[0];
+      availableSQLFiles.find((file) => file.path === "examples/monthly_sales/sql/03_pivot.sql") ??
+      availableSQLFiles[0];
     if (firstSQL) {
       selectedSQL.value = firstSQL.path;
       await loadSQL(firstSQL.path);
@@ -943,9 +944,10 @@ async function loadInitial(): Promise<boolean> {
       sqlContent.value = "";
     }
     await loadSQLCompletions();
+    const availableTemplates = result.templates ?? [];
     const firstTemplate =
-      result.templates.find((file) => file.path === "examples/monthly_sales/reports/monthly_sales_python.qmd") ??
-      result.templates[0];
+      availableTemplates.find((file) => file.path === "examples/monthly_sales/reports/monthly_sales_python.qmd") ??
+      availableTemplates[0];
     if (firstTemplate) {
       selectedTemplate.value = firstTemplate.path;
       await loadTemplate(firstTemplate.path);

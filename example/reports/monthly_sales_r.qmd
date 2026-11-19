@@ -1,5 +1,5 @@
 ---
-title: "{{title}}"
+title: "月度销售分析（R）"
 subtitle: "R / DuckDB 组合分析报告"
 author: "DuckDB Report Studio"
 date: today
@@ -14,7 +14,6 @@ format:
     embed-resources: true
   typst:
     papersize: a4
-    mainfont: "{{report_font}}"
     fontsize: 9pt
     margin:
       x: 14mm
@@ -23,9 +22,10 @@ execute:
   echo: false
   warning: false
   message: false
-params:
-  title: "月度销售分析（R）"
-  top_n: 8
+knitr:
+  opts_chunk:
+    dev: ragg_png
+    dpi: 144
 ---
 
 ```{r}
@@ -38,8 +38,8 @@ library(ggplot2)
 library(knitr)
 library(scales)
 
-database_path <- "{{database}}"
-top_n <- as.integer("{{top_n}}")
+database_path <- "analysis.duckdb"
+top_n <- 8L
 
 drv <- duckdb()
 con <- dbConnect(drv, dbdir = database_path, read_only = TRUE)
@@ -94,7 +94,7 @@ trend |>
   scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
   scale_x_date(labels = date_format("%Y-%m")) +
   labs(x = NULL, y = "收入") +
-  theme_minimal(base_family = "{{report_font}}") +
+  theme_minimal(base_family = "sans") +
   theme(
     panel.grid.minor = element_blank(),
     panel.grid.major.x = element_blank(),

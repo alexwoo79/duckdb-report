@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/alexwoo79/duckdb-report/internal/database"
@@ -164,6 +165,19 @@ func TestSaveSettingsSwitchesWorkspace(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(newRoot, "workflows", "current.json")); !os.IsNotExist(err) {
 		t.Fatalf("custom workspace workflow was created: %v", err)
 	}
+	bootstrap, err := app.Bootstrap()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bootstrap.SQLFiles == nil ||
+		bootstrap.Templates == nil ||
+		bootstrap.Workflows == nil ||
+		bootstrap.Databases == nil ||
+		bootstrap.Tables == nil ||
+		bootstrap.Sources == nil ||
+		bootstrap.Runs == nil {
+		t.Fatalf("empty workspace collections must be non-nil: %#v", bootstrap)
+	}
 	if _, err := app.database.Query(t.Context(), "SELECT 1", 1); err != nil {
 		t.Fatalf("query switched workspace: %v", err)
 	}
@@ -265,6 +279,57 @@ func TestFilterLegacySampleTables(t *testing.T) {
 	}
 	if filtered[0].Name != "contract_source" || filtered[1].Catalog != "external" {
 		t.Fatalf("filtered tables = %#v", filtered)
+	}
+}
+
+func TestBundledExampleSQLIsSelfContained(t *testing.T) {
+	t.Parallel()
+	paths, err := filepath.Glob(filepath.Join("example", "sql", "*.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no bundled example SQL files found")
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(content), "{{") {
+			t.Errorf("%s still requires an external preset parameter", path)
+		}
+	}
+}
+
+func TestBundledRExampleUsesPortableGraphicsDevice(t *testing.T) {
+	t.Parallel()
+	content, err := os.ReadFile(filepath.Join("example", "reports", "monthly_sales_r.qmd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "dev: ragg_png") {
+		t.Fatal("R example must use ragg_png to avoid X11 and cairo runtime dependencies")
+	}
+}
+
+func TestBundledExampleQMDHasNoTemplateParameters(t *testing.T) {
+	t.Parallel()
+	paths, err := filepath.Glob(filepath.Join("example", "reports", "*.qmd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no bundled example QMD files found")
+	}
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(content), "{{") {
+			t.Errorf("%s still requires a runtime template parameter", path)
+		}
 	}
 }
 

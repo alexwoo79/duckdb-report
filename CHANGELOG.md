@@ -6,6 +6,9 @@
 
 - Treat only the application default directory as a seeded workspace. User-selected workspaces no longer receive starter folders or `workflows/current.json`; optional directories are created only when files or reports are written.
 - Remove the SQL parameter strip so SQL executes exactly as edited and report rendering does not inject preset parameters.
+- Make bundled SQL and QMD samples self-contained with `analysis_params`, fixed QMD defaults, and a one-click `run_all.sql` so older demo assets remain usable.
+- Render the R sample with `ragg_png` so report generation works when macOS R cannot load X11 or Cairo graphics libraries.
+- Remove the obsolete starter `templates/monthly_report.qmd` and provide non-null empty SQL, template, and workflow collections when switching to an empty workspace.
 
 ## v2.0.1 - 2026-11-20
 

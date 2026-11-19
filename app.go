@@ -175,6 +175,15 @@ func (a *App) Bootstrap() (model.Bootstrap, error) {
 		tables = []model.TableRef{}
 	}
 	tables = a.filterLegacySampleTables(tables)
+	if sqlFiles == nil {
+		sqlFiles = []model.FileRef{}
+	}
+	if templates == nil {
+		templates = []model.FileRef{}
+	}
+	if workflows == nil {
+		workflows = []model.FileRef{}
+	}
 	if databases == nil {
 		databases = []model.DatabaseRef{}
 	}

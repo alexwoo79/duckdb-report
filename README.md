@@ -24,7 +24,7 @@
 - 报告页不预设数据 SQL；Python、R、图表和最终表格代码全部由用户在 QMD 中维护。
 - 报告同时保留 QMD、HTML/PDF、日志与 `analysis.duckdb` 快照，便于审阅和复用。
 - macOS、Windows 与 Linux 发布包支持原生桌面运行，界面沿用 `duckui_notebook` 的图标与视觉风格。
-- SQL 直接按编辑器内容执行，不维护额外参数栏；报告通过 `{{database}}` 接收只读快照。
+- SQL 直接按编辑器内容执行，不维护额外参数栏；QMD 在报告运行目录直接读取 `analysis.duckdb`。
 - SQL 与报告执行日志、独立产物目录和最近产物入口。
 - 设置页可修改应用显示名、目标工作区和主题，并查看报告运行时状态。
 - 工作区可导出为独立 `.duckdb` 发布快照，使用 R DuckDB 驱动可读取的兼容存储格式。
@@ -130,7 +130,7 @@ duckdb-report-cli --workspace /path/to/workspace render \
 - `query`：执行文件或内联 SQL，支持 `.read`。
 - `doctor`：只读检查 SQL、QMD、资源路径和运行时；旧工作区仍会校验其兼容配置。
 - `import`：导入 CSV、JSON、Parquet、Excel 或附加 DuckDB。
-- `render`：渲染 QMD 为 HTML/PDF；QMD 通过 `{{database}}` 读取报告快照。
+- `render`：渲染 QMD 为 HTML/PDF；QMD 直接读取运行目录中的报告快照。
 - `workflow validate|run|import|export`：可选的旧版兼容命令，不作为日常分析入口。
 
 `--json` 将机器可读结果写到 stdout，诊断和步骤进度写到 stderr；退出码 `0`
@@ -208,7 +208,7 @@ QMD 不一定需要 R 或 Python：
 - PDF 中文字体会根据 macOS、Windows 或 Linux 自动选择，也可在 QMD 的 `params` 中覆盖。
 
 报告页会实时识别当前 QMD 的依赖；缺少运行时时会禁用渲染按钮并说明替代方案。
-QMD 可以通过 `{{database}}` 读取本次报告自动生成的只读 `analysis.duckdb` 快照。
+QMD 在报告运行目录中直接打开自动生成的只读 `analysis.duckdb` 快照。
 
 ## 手工分析
 
@@ -218,7 +218,7 @@ QMD 可以通过 `{{database}}` 读取本次报告自动生成的只读 `analysi
 2. 手工运行 SQL，并使用 `CREATE OR REPLACE TABLE` 将每个分析结果物化为可查询表。
 3. 检查结果与质量问题，确定报告需要展示的最终结果表。
 4. 选择 QMD，在脚本块中自行编写数据读取、计算和图表代码。
-5. 使用 `{{database}}` 连接本次报告快照，生成 HTML 或 PDF。
+5. 在 QMD 中直接连接 `analysis.duckdb`，生成 HTML 或 PDF。
 
 报告运行目录同时保留：
 

@@ -166,36 +166,10 @@ func DefaultWorkflow() model.Workflow {
 					"limit":      "500",
 				},
 			},
-			{
-				ID:          "report-monthly",
-				Type:        model.PresetReport,
-				Name:        "经营月报模板",
-				Description: "Quarto QMD 模板，默认输出自包含 HTML。",
-				Params: map[string]string{
-					"template": "templates/monthly_report.qmd",
-					"format":   "html",
-					"query":    "SELECT strftime(month, '%Y-%m') AS month, region, product, orders, revenue, cost, gross_profit, gross_margin_pct FROM monthly_summary ORDER BY month, region, product",
-				},
-			},
-			{
-				ID:          "output-default",
-				Type:        model.PresetOutput,
-				Name:        "报告与数据发布包",
-				Description: "将报告、数据库快照和 QMD 源文件打包为 ZIP。",
-				Params: map[string]string{
-					"filename":         "report-package",
-					"directory":        "exports",
-					"include_report":   "true",
-					"include_database": "true",
-					"include_source":   "true",
-				},
-			},
 		},
 		Steps: []model.Step{
 			{ID: "import", Name: "导入销售明细", Kind: model.StepImport, PresetID: "source-sales", Enabled: true},
 			{ID: "analyze", Name: "计算月度汇总", Kind: model.StepSQL, PresetID: "sql-monthly", Enabled: true},
-			{ID: "render", Name: "渲染经营报告", Kind: model.StepRender, PresetID: "report-monthly", Enabled: true},
-			{ID: "export", Name: "打包报告与数据", Kind: model.StepExport, PresetID: "output-default", Enabled: true},
 		},
 	}
 }

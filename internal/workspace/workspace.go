@@ -119,6 +119,9 @@ func newStore(root string, exampleFS fs.FS, seedData bool) (*Store, error) {
 	if err := upgradeLegacyDefaults(store, seed); err != nil {
 		return nil, err
 	}
+	if err := upgradeBundledExamples(store, exampleFS); err != nil {
+		return nil, err
+	}
 	return store, nil
 }
 
@@ -315,7 +318,7 @@ func (s *Store) ListTemplates() ([]model.FileRef, error) {
 	if err != nil {
 		return nil, err
 	}
-	return s.filterLegacySeedFiles(files, "templates/monthly_report.qmd"), nil
+	return files, nil
 }
 
 func (s *Store) filterLegacySeedFiles(files []model.FileRef, paths ...string) []model.FileRef {
@@ -340,7 +343,6 @@ func removeLegacySeedFiles(store *Store, seed fs.FS) error {
 	paths := []string{
 		"sql/monthly_analysis.sql",
 		"sql/monthly_result.sql",
-		"templates/monthly_report.qmd",
 	}
 	referenced, err := legacySeedReferences(store, paths)
 	if err != nil {
@@ -500,7 +502,7 @@ func (s *Store) listFiles(extensions, roots []string) ([]model.FileRef, error) {
 		allowed[strings.ToLower(extension)] = struct{}{}
 	}
 	seen := make(map[string]struct{})
-	var result []model.FileRef
+	result := []model.FileRef{}
 	for _, root := range roots {
 		if _, err := os.Stat(root); err != nil {
 			continue
@@ -599,33 +601,8 @@ func sanitizeSlug(value string) string {
 }
 
 func upgradeLegacyDefaults(store *Store, seed fs.FS) error {
-	templatePath := filepath.Join(store.Templates, "monthly_report.qmd")
-	currentTemplate, err := os.ReadFile(templatePath)
-	if err == nil &&
-		bytes.Contains(currentTemplate, []byte(`subtitle: "DuckDB 本地分析工作流"`)) &&
-		bytes.Contains(currentTemplate, []byte("本报告由 **DuckDB + SQL + Quarto** 自动生成")) &&
-		!bytes.Contains(currentTemplate, []byte("mainfont: \"PingFang SC\"")) &&
-		!bytes.Contains(currentTemplate, []byte("assets/report.css")) {
-		replacement, readErr := fs.ReadFile(seed, "templates/monthly_report.qmd")
-		if readErr != nil {
-			return fmt.Errorf("read upgraded report template: %w", readErr)
-		}
-		if writeErr := os.WriteFile(templatePath, replacement, 0o644); writeErr != nil {
-			return fmt.Errorf("upgrade report template: %w", writeErr)
-		}
-		currentTemplate = replacement
-	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("inspect report template: %w", err)
-	}
-	if err == nil && bytes.Contains(currentTemplate, []byte(`mainfont: "PingFang SC"`)) {
-		currentTemplate = bytes.ReplaceAll(
-			currentTemplate,
-			[]byte(`mainfont: "PingFang SC"`),
-			[]byte(`mainfont: "{{report_font}}"`),
-		)
-		if writeErr := os.WriteFile(templatePath, currentTemplate, 0o644); writeErr != nil {
-			return fmt.Errorf("upgrade report font: %w", writeErr)
-		}
+	if err := removeObsoleteStarterTemplate(store); err != nil {
+		return err
 	}
 	if err := upgradeLegacyDemoOwners(store, seed); err != nil {
 		return err
@@ -679,6 +656,135 @@ func upgradeLegacyDefaults(store *Store, seed fs.FS) error {
 		}
 	}
 	return nil
+}
+
+func removeObsoleteStarterTemplate(store *Store) error {
+	path := filepath.Join(store.Templates, "monthly_report.qmd")
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("remove obsolete starter template: %w", err)
+	}
+	return nil
+}
+
+const analysisParamsSQL = `CREATE TABLE IF NOT EXISTS analysis_params AS
+SELECT
+    DATE '2026-01-01' AS start_date,
+    DATE '2026-12-31' AS end_date,
+    8 AS top_n;
+
+`
+
+func upgradeBundledExamples(store *Store, exampleFS fs.FS) error {
+	if exampleFS == nil {
+		return nil
+	}
+	exampleRoot := filepath.Join(store.Root, "examples", "monthly_sales")
+	if _, err := os.Stat(exampleRoot); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("inspect bundled examples: %w", err)
+	}
+	upgrades := []struct {
+		path      string
+		transform func(string) string
+	}{
+		{path: filepath.Join(exampleRoot, "reports", "monthly_sales_r.qmd"), transform: upgradeSampleRReport},
+		{path: filepath.Join(exampleRoot, "reports", "monthly_sales_python.qmd"), transform: upgradeSamplePythonReport},
+		{path: filepath.Join(exampleRoot, "sql", "02_summary.sql"), transform: upgradeSampleSQL},
+		{path: filepath.Join(exampleRoot, "sql", "03_pivot.sql"), transform: upgradeSampleSQL},
+		{path: filepath.Join(store.SQL, "monthly_analysis.sql"), transform: upgradeSampleSQL},
+	}
+	for _, upgrade := range upgrades {
+		content, err := os.ReadFile(upgrade.path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("inspect bundled sample %q: %w", upgrade.path, err)
+		}
+		next := upgrade.transform(string(content))
+		if next == string(content) {
+			continue
+		}
+		if err := os.WriteFile(upgrade.path, []byte(next), 0o644); err != nil {
+			return fmt.Errorf("upgrade bundled sample %q: %w", upgrade.path, err)
+		}
+	}
+
+	runAllPath := filepath.Join(exampleRoot, "sql", "run_all.sql")
+	if _, err := os.Stat(runAllPath); errors.Is(err, os.ErrNotExist) {
+		content, readErr := fs.ReadFile(exampleFS, "example/sql/run_all.sql")
+		if readErr != nil {
+			return fmt.Errorf("read bundled run_all.sql: %w", readErr)
+		}
+		if writeErr := os.WriteFile(runAllPath, content, 0o644); writeErr != nil {
+			return fmt.Errorf("install bundled run_all.sql: %w", writeErr)
+		}
+	} else if err != nil {
+		return fmt.Errorf("inspect bundled run_all.sql: %w", err)
+	}
+	return nil
+}
+
+func upgradeSampleSQL(content string) string {
+	if !strings.Contains(content, "{{") {
+		return content
+	}
+	needsParams := !strings.Contains(content, "analysis_params")
+	content = strings.NewReplacer(
+		"DATE '{{start_date}}'", "(SELECT start_date FROM analysis_params)",
+		"DATE '{{end_date}}'", "(SELECT end_date FROM analysis_params)",
+		"LIMIT {{top_n}}", "LIMIT (SELECT top_n FROM analysis_params)",
+	).Replace(content)
+	if needsParams {
+		content = analysisParamsSQL + content
+	}
+	return content
+}
+
+func upgradeSamplePythonReport(content string) string {
+	if !strings.Contains(content, `subtitle: "Python / DuckDB 组合分析报告"`) ||
+		!strings.Contains(content, "{{") {
+		return content
+	}
+	return strings.NewReplacer(
+		`title: "{{title}}"`, `title: "月度销售分析（Python）"`,
+		`DATABASE_PATH = "{{database}}"`, `DATABASE_PATH = "analysis.duckdb"`,
+		`TOP_N = int("{{top_n}}")`, "TOP_N = 8",
+		"    \"{{report_font}}\",\n", "",
+		`mainfont: "{{report_font}}"`, `mainfont: "Noto Sans CJK SC"`,
+	).Replace(content)
+}
+
+func upgradeSampleRReport(content string) string {
+	if !strings.Contains(content, `subtitle: "R / DuckDB 组合分析报告"`) {
+		return content
+	}
+	content = strings.NewReplacer(
+		`title: "{{title}}"`, `title: "月度销售分析（R）"`,
+		`database_path <- "{{database}}"`, `database_path <- "analysis.duckdb"`,
+		`top_n <- as.integer("{{top_n}}")`, "top_n <- 8L",
+		`mainfont: "{{report_font}}"`, `mainfont: "PingFang SC"`,
+		`base_family = "{{report_font}}"`, `base_family = "sans"`,
+	).Replace(content)
+	if strings.Contains(content, "```{r}") &&
+		!strings.Contains(content, "dev: ragg_png") &&
+		!strings.Contains(content, "\nknitr:\n") {
+		content = insertFrontMatter(content, "knitr:\n  opts_chunk:\n    dev: ragg_png\n    dpi: 144\n")
+	}
+	return content
+}
+
+func insertFrontMatter(content, block string) string {
+	if !strings.HasPrefix(content, "---\n") {
+		return content
+	}
+	end := strings.Index(content[4:], "\n---\n")
+	if end < 0 {
+		return content
+	}
+	index := 4 + end
+	return content[:index] + "\n" + block + content[index:]
 }
 
 func upgradeLegacyDemoOwners(store *Store, seed fs.FS) error {

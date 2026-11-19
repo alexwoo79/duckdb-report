@@ -31,30 +31,6 @@
         "query_file": "sql/monthly_result.sql",
         "limit": "500"
       }
-    },
-    {
-      "id": "report-monthly",
-      "type": "report",
-      "name": "经营月报模板",
-      "description": "Quarto QMD 模板，默认输出自包含 HTML。",
-      "params": {
-        "template": "templates/monthly_report.qmd",
-        "format": "html",
-        "query": "SELECT strftime(month, '%Y-%m') AS month, region, product, orders, revenue, cost, gross_profit, gross_margin_pct FROM monthly_summary ORDER BY month, region, product"
-      }
-    },
-    {
-      "id": "output-default",
-      "type": "output",
-      "name": "报告与数据发布包",
-      "description": "将报告、数据库快照和 QMD 源文件打包为 ZIP。",
-      "params": {
-        "filename": "report-package",
-        "directory": "exports",
-        "include_report": "true",
-        "include_database": "true",
-        "include_source": "true"
-      }
     }
   ],
   "steps": [
@@ -70,20 +46,6 @@
       "name": "计算月度汇总",
       "kind": "sql",
       "presetId": "sql-monthly",
-      "enabled": true
-    },
-    {
-      "id": "render",
-      "name": "渲染经营报告",
-      "kind": "render",
-      "presetId": "report-monthly",
-      "enabled": true
-    },
-    {
-      "id": "export",
-      "name": "打包报告与数据",
-      "kind": "export",
-      "presetId": "output-default",
       "enabled": true
     }
   ]

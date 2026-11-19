@@ -1,3 +1,10 @@
+-- 手工分析参数：修改这里即可调整后续汇总区间与产品排名数量。
+CREATE OR REPLACE TABLE analysis_params AS
+SELECT
+    DATE '2026-01-01' AS start_date,
+    DATE '2026-12-31' AS end_date,
+    8 AS top_n;
+
 -- 将订单、客户、明细和产品四张子表连接为订单事实表。
 CREATE OR REPLACE TABLE order_detail AS
 SELECT

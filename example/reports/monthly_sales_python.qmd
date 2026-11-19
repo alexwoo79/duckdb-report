@@ -1,5 +1,5 @@
 ---
-title: "{{title}}"
+title: "月度销售分析（Python）"
 subtitle: "Python / DuckDB 组合分析报告"
 author: "DuckDB Report Studio"
 date: today
@@ -14,7 +14,6 @@ format:
     embed-resources: true
   typst:
     papersize: a4
-    mainfont: "{{report_font}}"
     fontsize: 9pt
     margin:
       x: 14mm
@@ -23,9 +22,6 @@ execute:
   echo: false
   warning: false
   message: false
-params:
-  title: "月度销售分析（Python）"
-  top_n: 8
 ---
 
 ```{python}
@@ -35,10 +31,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from IPython.display import Markdown, display
 
-DATABASE_PATH = "{{database}}"
-TOP_N = int("{{top_n}}")
+DATABASE_PATH = "analysis.duckdb"
+TOP_N = 8
 plt.rcParams["font.sans-serif"] = [
-    "{{report_font}}",
     "PingFang SC",
     "Microsoft YaHei",
     "Noto Sans CJK SC",

@@ -1,3 +1,9 @@
+CREATE TABLE IF NOT EXISTS analysis_params AS
+SELECT
+    DATE '2026-01-01' AS start_date,
+    DATE '2026-12-31' AS end_date,
+    8 AS top_n;
+
 -- 区域 × 品类收入透视与月度趋势。
 CREATE OR REPLACE TABLE region_category_pivot AS
 SELECT
@@ -33,4 +39,4 @@ SELECT
 FROM order_detail
 GROUP BY product_name, category
 ORDER BY revenue DESC
-LIMIT {{top_n}};
+LIMIT (SELECT top_n FROM analysis_params);

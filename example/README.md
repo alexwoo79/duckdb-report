@@ -27,18 +27,20 @@
 3. `sql/03_pivot.sql`：生成 `region_category_pivot`、`monthly_trend`、`product_ranking`。
 4. `sql/04_validation.sql`：验证 Join 行数和收入汇总。
 
-日期使用 `{{start_date}}`、`{{end_date}}`，产品排名数量使用 `{{top_n}}`。
+`01_join.sql` 会建立 `analysis_params` 表，统一保存样例日期区间与产品排名数量。
+后续 SQL 从该表读取参数，因此不再依赖应用预设参数栏或工作流运行参数。
 
 ## 手工运行
 
 在桌面版 SQL 页按顺序打开并运行 `01_join.sql`、`02_summary.sql`、
 `03_pivot.sql` 和 `04_validation.sql`。每份 SQL 都会物化独立结果表，便于逐表检查。
+也可以直接打开 `run_all.sql` 一键复跑全部步骤。
 
 完成 SQL 后，在报告页：
 
 1. 选择 Python 或 R QMD。
 2. 在 QMD 脚本块中直接读取需要的结果表，分析、图表和表格代码全部写在 QMD 中。
-3. 使用 `{{database}}` 连接本次报告的 `analysis.duckdb` 快照。
+3. 直接连接报告运行目录中的 `analysis.duckdb`。
 4. 生成 HTML 或 PDF。
 
 ## 报告
@@ -47,15 +49,8 @@
 - `reports/monthly_sales_r.qmd`
 - `reports/assets/report.css`
 
-两份报告读取报告运行目录中的 DuckDB 快照。应用会在 Quarto 执行前替换：
-
-```text
-{{database}}
-{{top_n}}
-```
-
-应用程序会把 `database` 覆盖为当前运行的只读快照路径，因此不会与主工作库争用文件锁，
-也不需要 Python papermill 或 Quarto `params` 运行时。
+两份报告直接读取报告运行目录中的 `analysis.duckdb` 快照，因此不会与主工作库争用文件锁。
+报告标题、产品排名数量、数据查询和图表代码都直接写在 QMD 中，不需要额外参数预设。
 
 ## 使用方式
 
