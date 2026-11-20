@@ -20,4 +20,4 @@ cd frontend && npm run build
 
 On Linux with WebKitGTK 4.1, use `go test -tags webkit2_41 ./...`; `make test` selects this tag automatically.
 
-Keep generated binaries, `frontend/dist`, DuckDB files, and report output out of commits. Explain any workflow format changes and include a migration path for existing `workflows/current.json` files.
+Keep generated binaries, `frontend/dist`, DuckDB files, and report output out of commits. Explain workspace format changes and include a migration path when existing files are affected.

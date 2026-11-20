@@ -118,3 +118,17 @@ func TestExecuteReturnsRuntimeExitCode(t *testing.T) {
 		t.Fatalf("execute() exit code = %d, want 1", exitCode)
 	}
 }
+
+func TestWorkflowCommandIsRemoved(t *testing.T) {
+	t.Parallel()
+	exitCode := execute(
+		context.Background(),
+		[]string{"workflow"},
+		nil,
+		io.Discard,
+		io.Discard,
+	)
+	if exitCode != 2 {
+		t.Fatalf("execute() exit code = %d, want unknown-command exit code 2", exitCode)
+	}
+}

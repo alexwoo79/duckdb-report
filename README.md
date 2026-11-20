@@ -38,7 +38,6 @@ main.go / app.go    Wails 桌面入口与前端绑定
 internal/cli        CLI 命令树与无界面工作区执行
 internal/database   DuckDB 会话、数据导入、SQL 执行
 internal/report     Quarto 渲染与报告表格生成
-internal/runner     可选的 Workflow CLI 兼容执行层
 internal/workspace  工作区、模板、参数与产物管理
 internal/preview    受控 HTML/PDF 预览路由
 frontend            Vue 3 + TypeScript + Vite
@@ -113,7 +112,7 @@ GitHub Actions 的 `v*` 标签发布会分别编译 macOS Universal（Apple Sili
 
 桌面二进制在带子命令时进入 CLI 模式；发布包同时提供独立的
 `duckdb-report-cli`，避免 Windows GUI 子系统影响控制台输出。CLI 与 GUI
-共用工作区、DuckDB 与 Quarto。Workflow 命令仅为旧工作区和自动化脚本保留兼容。
+共用工作区、DuckDB、SQL 与 Quarto 报告能力。
 
 ```bash
 duckdb-report-cli --workspace /path/to/workspace status --json
@@ -129,12 +128,11 @@ duckdb-report-cli --workspace /path/to/workspace render \
 
 - `status`：工作区、DuckDB、Quarto、R、Python、Jupyter、表和数据源状态。
 - `query`：执行文件或内联 SQL，支持 `.read`。
-- `doctor`：只读检查 SQL、QMD、资源路径和运行时；旧工作区仍会校验其兼容配置。
+- `doctor`：只读检查工作区 SQL、QMD、资源路径和运行时依赖。
 - `import`：导入 CSV、JSON、Parquet、Excel 或附加 DuckDB。
 - `render`：渲染 QMD 为 HTML/PDF；QMD 直接读取运行目录中的报告快照。
-- `workflow validate|run|import|export`：可选的旧版兼容命令，不作为日常分析入口。
 
-`--json` 将机器可读结果写到 stdout，诊断和步骤进度写到 stderr；退出码 `0`
+`--json` 将机器可读结果写到 stdout，诊断写到 stderr；退出码 `0`
 表示成功，`1` 表示运行错误，`2` 表示参数或命令使用错误。应用正在运行时不要用
 CLI 并发写同一个 `workspace.duckdb`。
 
@@ -164,7 +162,6 @@ workspace.duckdb
 data/
 sql/
 templates/
-workflows/current.json  # 可选，仅旧版工作流兼容
 runs/<run-id>/report.qmd
 runs/<run-id>/report.html
 runs/<run-id>/report.pdf
@@ -173,7 +170,7 @@ exports/<package-name>.zip
 examples/monthly_sales/
 ```
 
-只有应用默认工作区会在首次启动时复制内置示例和月度销售样例。通过设置页选择的任意工作区不会被识别为示例工作区；应用只会在该目录创建按需使用的 `workspace.duckdb`，不会预建 `data/sql/templates/workflows/runs` 目录，也不会生成 `workflows/current.json`。
+只有应用默认工作区会在首次启动时复制内置示例和月度销售样例。通过设置页选择的任意工作区不会被识别为示例工作区；应用只会在该目录创建按需使用的 `workspace.duckdb`，不会预建 `data/sql/templates/runs` 目录。
 
 设置保存在独立文件：
 
@@ -213,7 +210,7 @@ QMD 在报告运行目录中直接打开自动生成的只读 `analysis.duckdb` 
 
 ## 手工分析
 
-桌面版的推荐路径不依赖 Workflow：
+桌面版采用手工 SQL 分析路径：
 
 1. 在 SQL 页选择或新建 `.sql` 源文件。
 2. 手工运行 SQL，并使用 `CREATE OR REPLACE TABLE` 将每个分析结果物化为可查询表。
@@ -232,7 +229,7 @@ runs/<run-id>/
   assets/
 ```
 
-`workflows/current.json` 及 `workflow` CLI 命令继续保留，用于读取旧工作区和兼容已有自动化脚本；桌面导航、侧栏和检查器不再暴露工作流配置。
+旧工作区中可能残留的 `workflows/current.json` 不再由 CLI 读取或校验。
 
 ## 验证
 
@@ -245,7 +242,6 @@ make test
 
 当前测试覆盖：
 
-- 可选 Workflow 的兼容校验与参数优先级
 - `{{variable}}` 替换和路径越界防护
 - DuckDB 多语句查询
 - `.read` SQL 嵌套文件展开

@@ -5,19 +5,16 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"sort"
 	"strings"
 
 	"github.com/alexwoo79/duckdb-report/internal/model"
+	"github.com/alexwoo79/duckdb-report/internal/template"
 )
-
-var variablePattern = regexp.MustCompile(`\{\{\s*([a-zA-Z0-9_.-]+)\s*\}\}`)
 
 var (
 	ErrWorkflowInvalid = errors.New("workflow is invalid")
 	ErrStepInvalid     = errors.New("workflow step is invalid")
-	ErrVariableMissing = errors.New("workflow variable is missing")
+	ErrVariableMissing = template.ErrVariableMissing
 )
 
 func Validate(w model.Workflow) error {
@@ -86,24 +83,7 @@ func ParamsForStep(w model.Workflow, step model.Step, runtime map[string]string)
 }
 
 func ResolveTemplate(input string, params map[string]string) (string, error) {
-	var missing []string
-	result := variablePattern.ReplaceAllStringFunc(input, func(match string) string {
-		parts := variablePattern.FindStringSubmatch(match)
-		if len(parts) != 2 {
-			return match
-		}
-		value, ok := params[parts[1]]
-		if !ok {
-			missing = append(missing, parts[1])
-			return match
-		}
-		return value
-	})
-	if len(missing) > 0 {
-		sort.Strings(missing)
-		return "", fmt.Errorf("%w: %s", ErrVariableMissing, strings.Join(missing, ", "))
-	}
-	return result, nil
+	return template.Resolve(input, params)
 }
 
 func ResolveWorkspacePath(root, value string) (string, error) {

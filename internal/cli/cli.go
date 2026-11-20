@@ -15,7 +15,6 @@ import (
 
 	"github.com/alexwoo79/duckdb-report/internal/database"
 	"github.com/alexwoo79/duckdb-report/internal/report"
-	"github.com/alexwoo79/duckdb-report/internal/runner"
 	"github.com/alexwoo79/duckdb-report/internal/settings"
 	appversion "github.com/alexwoo79/duckdb-report/internal/version"
 	"github.com/alexwoo79/duckdb-report/internal/workspace"
@@ -25,7 +24,6 @@ import (
 type rootOptions struct {
 	workspace string
 	json      bool
-	quiet     bool
 }
 
 type usageError struct {
@@ -100,7 +98,6 @@ func newRootCommand(exampleFS fs.FS) *cobra.Command {
 		"workspace directory (defaults to DUCKDB_REPORT_HOME or the saved workspace)",
 	)
 	command.PersistentFlags().BoolVar(&options.json, "json", false, "write machine-readable JSON to stdout")
-	command.PersistentFlags().BoolVar(&options.quiet, "quiet", false, "suppress workflow progress messages on stderr")
 
 	command.AddCommand(
 		newStatusCommand(exampleFS, options),
@@ -108,7 +105,6 @@ func newRootCommand(exampleFS fs.FS) *cobra.Command {
 		newImportCommand(exampleFS, options),
 		newRenderCommand(exampleFS, options),
 		newDoctorCommand(exampleFS, options),
-		newWorkflowCommand(exampleFS, options),
 		newVersionCommand(options),
 	)
 	return command
@@ -118,7 +114,6 @@ type cliRuntime struct {
 	store    *workspace.Store
 	database *database.Service
 	renderer *report.Renderer
-	runner   *runner.Runner
 }
 
 func openRuntime(ctx context.Context, exampleFS fs.FS, root string) (*cliRuntime, error) {
@@ -157,7 +152,6 @@ func openRuntime(ctx context.Context, exampleFS fs.FS, root string) (*cliRuntime
 		store:    store,
 		database: db,
 		renderer: renderer,
-		runner:   runner.New(store, db, renderer),
 	}, nil
 }
 

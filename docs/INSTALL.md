@@ -13,9 +13,9 @@
 
 从 [Releases](https://github.com/alexwoo79/duckdb-report/releases) 下载对应压缩包：
 
-- `duckdb-report-v2.0.4-macos-universal.zip`
-- `duckdb-report-v2.0.4-windows-amd64.zip`
-- `duckdb-report-v*-linux-amd64.zip`
+- `duckdb-report-v2.0.5-macos-universal.zip`
+- `duckdb-report-v2.0.5-windows-amd64.zip`
+- `duckdb-report-v2.0.5-linux-amd64.zip`
 
 macOS：
 
@@ -59,7 +59,7 @@ Linux:   ${XDG_CONFIG_HOME:-~/.config}/duckdb_report
 ```
 
 只有该默认工作区会初始化示例数据、SQL、模板和旧版工作流文件。通过设置页选择的其它目录
-不会生成目录骨架或 `workflows/current.json`；`workspace.duckdb`、SQL、QMD、报告和运行
+不会生成目录骨架；`workspace.duckdb`、SQL、QMD、报告和运行
 目录只在实际需要时按需创建。
 
 可以通过设置页切换工作区，或使用环境变量临时覆盖：
@@ -147,7 +147,7 @@ tlmgr install collection-latexrecommended xecjk
 
 - Vue 前端生产构建。
 - `example/` 月度销售示例数据、SQL 和 QMD。
-- `internal/workspace/starters/` 基础模板、SQL、示例销售数据及可选旧版工作流兼容资产。
+- `internal/workspace/starters/` 基础模板、SQL 与示例销售数据。
 - `build/appicon.png`、`build/appicon.icns` 与 `build/windows/icon.ico`。
 
 运行后产生的资源位于工作区：
@@ -156,7 +156,6 @@ tlmgr install collection-latexrecommended xecjk
 data/                 导入与示例数据
 sql/                  用户 SQL
 templates/            QMD 模板及 assets
-workflows/current.json  # 仅旧版兼容，桌面版不展示配置页面
 runs/<run-id>/        报告、QMD、日志和 analysis.duckdb
 exports/              报告与数据库发布包
 workspace.duckdb      当前工作库
@@ -253,8 +252,8 @@ duckdb-report-cli --workspace /path/to/workspace render \
 
 CLI 与桌面应用不能同时写入同一个 `workspace.duckdb`。运行 CLI 前应关闭对应窗口。
 
-`doctor` 会检查 SQL 语法、QMD 表格映射、报告资源与运行时依赖；旧工作区仍会额外
-校验 Workflow 引用和 Step 顺序。加入 `--explain` 会检查查询计划绑定；`--strict`
+`doctor` 会直接检查工作区内 SQL 的语法、QMD 报告资源与运行时依赖，不读取旧工作流
+配置。加入 `--explain` 会检查 SQL 查询计划绑定；`--strict`
 会把 warning 作为失败返回。
 
 Agent 场景建议配合

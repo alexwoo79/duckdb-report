@@ -11,7 +11,7 @@ import (
 
 	"github.com/alexwoo79/duckdb-report/internal/database"
 	"github.com/alexwoo79/duckdb-report/internal/model"
-	"github.com/alexwoo79/duckdb-report/internal/workflow"
+	"github.com/alexwoo79/duckdb-report/internal/template"
 	"github.com/spf13/cobra"
 )
 
@@ -137,7 +137,7 @@ func loadQueryFile(store interface {
 	if err != nil {
 		return "", fmt.Errorf("read query file: %w", err)
 	}
-	resolved, err := workflow.ResolveTemplate(string(data), params)
+	resolved, err := template.Resolve(string(data), params)
 	if err != nil {
 		return "", err
 	}

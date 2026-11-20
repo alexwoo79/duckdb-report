@@ -13,7 +13,7 @@
   "info": {
     "companyName": "Alex Woo",
     "productName": "DuckDB Report Studio",
-    "productVersion": "2.0.4",
+    "productVersion": "2.0.5",
     "copyright": "Copyright © 2026 Alex Woo",
     "comments": "Local DuckDB + SQL + Quarto report workbench"
   }

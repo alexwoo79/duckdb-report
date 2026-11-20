@@ -60,6 +60,4 @@
 examples/monthly_sales/
 ```
 
-`workflows/` 下的 JSON 仅为旧版兼容保留，桌面版不再展示工作流配置页面。
-
 Python 报告需要 Python、Jupyter 和 Matplotlib；R 报告需要 R、DBI、DuckDB、dplyr、ggplot2、knitr。

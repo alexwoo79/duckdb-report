@@ -57,4 +57,7 @@ func TestStatusCommandJSONUsesArrays(t *testing.T) {
 	if result.Tables == nil || result.Sources == nil {
 		t.Fatalf("status arrays must not be null: %#v", result)
 	}
+	if bytes.Contains(stdout.Bytes(), []byte(`"workflow"`)) {
+		t.Fatalf("status output still contains workflow metadata:\n%s", stdout.String())
+	}
 }

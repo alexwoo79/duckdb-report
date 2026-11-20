@@ -17,7 +17,6 @@ import (
 type statusResult struct {
 	Workspace   string            `json:"workspace"`
 	Database    string            `json:"database"`
-	Workflow    string            `json:"workflow"`
 	Tables      []model.TableRef  `json:"tables"`
 	Sources     []model.Source    `json:"sources"`
 	Environment model.Environment `json:"environment"`
@@ -37,10 +36,6 @@ func newStatusCommand(exampleFS fs.FS, options *rootOptions) *cobra.Command {
 			ctx, cancel := context.WithTimeout(command.Context(), 30*time.Second)
 			defer cancel()
 			return useRuntime(ctx, exampleFS, options, func(runtime *cliRuntime) error {
-				workflow, err := runtime.store.LoadWorkflow()
-				if err != nil {
-					return err
-				}
 				tables, err := runtime.database.ListTables(ctx)
 				if err != nil {
 					return err
@@ -55,7 +50,6 @@ func newStatusCommand(exampleFS fs.FS, options *rootOptions) *cobra.Command {
 				result := statusResult{
 					Workspace:   runtime.store.Root,
 					Database:    runtime.store.Database,
-					Workflow:    workflow.Name,
 					Tables:      tables,
 					Sources:     sources,
 					Environment: runtime.renderer.Environments(ctx),
@@ -64,7 +58,6 @@ func newStatusCommand(exampleFS fs.FS, options *rootOptions) *cobra.Command {
 					writer := command.OutOrStdout()
 					fmt.Fprintf(writer, "workspace: %s\n", result.Workspace)
 					fmt.Fprintf(writer, "database:  %s\n", result.Database)
-					fmt.Fprintf(writer, "workflow:  %s\n", result.Workflow)
 					fmt.Fprintf(writer, "duckdb:    %s\n", result.Environment.DuckDBVersion)
 					fmt.Fprintf(writer, "quarto:    %s\n", fallback(result.Environment.QuartoVersion, "not found"))
 					fmt.Fprintf(writer, "r:         %s\n", fallback(result.Environment.RVersion, "not found"))

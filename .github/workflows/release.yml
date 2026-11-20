@@ -39,7 +39,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: alexwoo79/skills_plugins
-          ref: f2ba1a54ae43f06fc8c67daae1551280f4bf0ec3
+          ref: 6515f28514b288a1218068605dcde2744ac75e49
           path: .skill-source
       - uses: actions/setup-go@v5
         with:

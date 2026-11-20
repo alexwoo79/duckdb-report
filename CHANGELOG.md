@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.5 - 2026-11-21
+
+### Changed
+
+- Remove the CLI `workflow` command group and its runner wiring. `status` no longer reads workflow metadata, and `doctor` now audits workspace SQL and QMD files directly while ignoring legacy `workflows/current.json`.
+
 ## v2.0.4 - 2026-11-20
 
 ### Fixed
