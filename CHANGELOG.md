@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.6 - 2026-11-21
+
+### Fixed
+
+- Prevent Windows console windows from flashing when the desktop app probes or starts Quarto, R, Python, and system file handlers.
+
 ## v2.0.5 - 2026-11-21
 
 ### Changed

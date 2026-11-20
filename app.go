@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/alexwoo79/duckdb-report/internal/database"
+	"github.com/alexwoo79/duckdb-report/internal/executil"
 	"github.com/alexwoo79/duckdb-report/internal/model"
 	"github.com/alexwoo79/duckdb-report/internal/preview"
 	"github.com/alexwoo79/duckdb-report/internal/report"
@@ -1159,11 +1160,11 @@ func openWithSystem(path string) error {
 	var command *exec.Cmd
 	switch goruntime.GOOS {
 	case "darwin":
-		command = exec.Command("open", path)
+		command = executil.Command("open", path)
 	case "windows":
-		command = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
+		command = executil.Command("rundll32", "url.dll,FileProtocolHandler", path)
 	default:
-		command = exec.Command("xdg-open", path)
+		command = executil.Command("xdg-open", path)
 	}
 	output, err := command.CombinedOutput()
 	if err != nil {

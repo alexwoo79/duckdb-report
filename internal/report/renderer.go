@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/alexwoo79/duckdb-report/internal/database"
+	"github.com/alexwoo79/duckdb-report/internal/executil"
 	"github.com/alexwoo79/duckdb-report/internal/model"
 	"github.com/alexwoo79/duckdb-report/internal/workflow"
 	"github.com/alexwoo79/duckdb-report/internal/workspace"
@@ -143,7 +144,7 @@ func (r *Renderer) Render(ctx context.Context, request model.RenderRequest) (mod
 	}
 	renderCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	command := exec.CommandContext(
+	command := executil.CommandContext(
 		renderCtx,
 		r.quarto,
 	)
@@ -696,7 +697,7 @@ func splitLog(value string) []string {
 func commandVersion(ctx context.Context, binary string) string {
 	commandCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	output, err := exec.CommandContext(commandCtx, binary, "--version").CombinedOutput()
+	output, err := executil.CommandContext(commandCtx, binary, "--version").CombinedOutput()
 	if err != nil {
 		return ""
 	}
