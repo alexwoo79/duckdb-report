@@ -491,13 +491,6 @@ const activeDocumentLabel = computed(() => {
   if (activeView.value === "sql") return selectedSQL.value || "临时 SQL";
   return "工作区";
 });
-const workspaceChangePending = computed(() =>
-  Boolean(
-    state.value?.settings.currentWorkspace &&
-      settingsDraft.value.workspace &&
-      settingsDraft.value.workspace !== state.value.settings.currentWorkspace,
-  ),
-);
 const qmdUsesR = computed(() => /```\s*\{\s*r\b/i.test(reportContent.value));
 const qmdUsesPython = computed(() => /```\s*\{\s*python\b/i.test(reportContent.value));
 const qmdNeedsJupyter = computed(() => qmdUsesPython.value);
@@ -1431,12 +1424,6 @@ async function chooseWorkspaceDirectory() {
   }
 }
 
-function resetWorkspacePath() {
-  if (state.value?.settings.defaultWorkspace) {
-    settingsDraft.value.workspace = state.value.settings.defaultWorkspace;
-  }
-}
-
 async function saveSettings() {
   if (settingsBusy.value) return;
   settingsBusy.value = true;
@@ -1651,6 +1638,51 @@ onBeforeUnmount(() => {
             <AppIcon name="refresh" :size="15" />
           </button>
         </div>
+
+        <section class="workspace-nav" aria-label="工作区操作">
+          <div class="workspace-nav-head">
+            <div>
+              <span class="eyebrow">WORKSPACE</span>
+              <strong>当前工作区</strong>
+            </div>
+            <button
+              type="button"
+              class="icon-button compact"
+              title="打开当前工作区目录"
+              aria-label="打开当前工作区目录"
+              @click="openWorkspaceFolder"
+            >
+              <AppIcon name="external" :size="14" />
+            </button>
+          </div>
+          <code
+            class="workspace-nav-path"
+            :title="state?.settings.currentWorkspace"
+          >
+            {{ state?.settings.currentWorkspace }}
+          </code>
+          <div class="workspace-nav-actions">
+            <button
+              class="ghost-button small"
+              :disabled="state?.settings.workspaceOverride || settingsBusy"
+              @click="chooseWorkspaceDirectory"
+            >
+              <AppIcon name="file" :size="14" />
+              切换工作区
+            </button>
+            <button
+              class="ghost-button small"
+              :disabled="exportWorkspaceBusy"
+              @click="exportWorkspaceDuckDB"
+            >
+              <AppIcon name="download" :size="14" />
+              {{ exportWorkspaceBusy ? "导出中…" : "导出数据库" }}
+            </button>
+          </div>
+          <p v-if="state?.settings.workspaceOverride" class="workspace-nav-note">
+            当前目录由 <code>DUCKDB_REPORT_HOME</code> 控制
+          </p>
+        </section>
 
         <section class="side-section">
           <div class="section-title">
@@ -2258,7 +2290,7 @@ onBeforeUnmount(() => {
             <div>
               <span class="eyebrow">APPLICATION SETTINGS</span>
               <h1>设置</h1>
-              <p>配置应用显示名称、当前工作区和界面外观。保存工作区修改后会立即切换并重新加载。</p>
+              <p>配置应用名称、界面外观和报告运行时。工作区切换与数据库导出位于左侧数据资产栏。</p>
             </div>
             <button class="primary-button" :disabled="settingsBusy" @click="saveSettings">
               <AppIcon name="save" :size="15" />
@@ -2289,51 +2321,6 @@ onBeforeUnmount(() => {
                 </div>
               </section>
 
-              <section class="settings-card">
-                <div class="settings-card-head">
-                  <div class="settings-card-icon"><AppIcon name="database" :size="19" /></div>
-                  <div>
-                    <span class="eyebrow">WORKSPACE</span>
-                    <h2>工作区</h2>
-                  </div>
-                </div>
-                <p class="settings-description">
-                  自定义工作区只创建按需使用的 DuckDB 工作库；SQL、QMD、报告和旧版工作流目录会在实际写入时创建。
-                </p>
-                <label class="form-field">
-                  <span>工作区目录（选择后自动切换）</span>
-                  <input
-                    v-model="settingsDraft.workspace"
-                    :disabled="state?.settings.workspaceOverride"
-                    spellcheck="false"
-                  />
-                </label>
-                <div class="setting-actions">
-                  <button
-                    class="ghost-button"
-                    :disabled="state?.settings.workspaceOverride"
-                    @click="chooseWorkspaceDirectory"
-                  >
-                    <AppIcon name="file" :size="14" /> 选择并切换
-                  </button>
-                  <button class="ghost-button" @click="resetWorkspacePath">恢复默认路径</button>
-                  <button class="text-button" @click="openWorkspaceFolder">打开当前工作区</button>
-                  <button class="text-button" :disabled="exportWorkspaceBusy" @click="exportWorkspaceDuckDB">
-                    <AppIcon name="download" :size="14" />
-                    {{ exportWorkspaceBusy ? "正在导出…" : "导出工作库 .duckdb" }}
-                  </button>
-                </div>
-                <div class="workspace-current">
-                  <span>当前运行中的工作区</span>
-                  <code>{{ state?.settings.currentWorkspace }}</code>
-                </div>
-                <div v-if="state?.settings.workspaceOverride" class="settings-warning">
-                  当前工作区由 <code>DUCKDB_REPORT_HOME</code> 控件；取消该环境变量后才能使用保存的工作区。
-                </div>
-                <div v-else-if="workspaceChangePending" class="settings-warning pending">
-                  手动输入路径后，请点击页面右上角“保存设置”完成切换。现有工作区不会被删除，也不会自动迁移。
-                </div>
-              </section>
             </div>
 
             <div class="settings-column">

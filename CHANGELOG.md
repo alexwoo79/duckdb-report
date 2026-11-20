@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.3 - 2026-11-20
+
+### Changed
+
+- Move workspace switching and DuckDB export controls into the data asset sidebar, remove the workspace card from Settings, and rebalance the remaining Settings cards into a two-column layout.
+
 ## v2.0.2 - 2026-11-20
 
 ### Fixed
