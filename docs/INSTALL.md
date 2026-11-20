@@ -168,7 +168,7 @@ workspace.duckdb      当前工作库
 
 - Go 1.26+
 - Node.js 20+
-- Wails CLI 2.13
+- Wails 2.13.0（`make` 会自动运行固定版本，无需单独安装 CLI）
 - 对应平台 C 编译器
 
 Linux 还需要 GTK 3 与 WebKitGTK 4.1 开发包。Ubuntu 24.04/Debian 13：
@@ -231,7 +231,7 @@ build/bin/duckdb_report
 build/bin/duckdb-report-cli
 ```
 
-也可以直接运行 `GOTOOLCHAIN=go1.26.0 wails build -platform linux/amd64 -tags webkit2_41 -trimpath -ldflags="-s -w"`。`make` 与 GitHub Actions 默认使用 WebKitGTK 4.1，并固定 Wails 2.13 已验证的 Go 1.26 工具链；若目标系统只有 WebKitGTK 4.0，可在 Linux 原生环境使用 `make build-linux LINUX_WEBKIT_TAGS=webkit2_40`。
+也可以直接运行 `GOTOOLCHAIN=go1.26.0 wails build -platform linux/amd64 -tags webkit2_41 -trimpath -ldflags="-s -w"`。`make` 与 GitHub Actions 默认使用 WebKitGTK 4.1，并固定 Wails 2.13 已验证的 Go 1.26 工具链；`make` 会通过 Go 运行项目固定的 Wails CLI，不依赖系统 `wails` shim。若目标系统只有 WebKitGTK 4.0，可在 Linux 原生环境使用 `make dev LINUX_WEBKIT_TAGS=webkit2_40` 或 `make build-linux LINUX_WEBKIT_TAGS=webkit2_40`。
 
 构建独立 CLI：
 

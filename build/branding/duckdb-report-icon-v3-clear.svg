@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="DuckDB Report Studio icon">
+  <defs>
+    <linearGradient id="tile" x1="164" y1="112" x2="862" y2="920" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#103f4d"/>
+      <stop offset="1" stop-color="#062b36"/>
+    </linearGradient>
+    <mask id="quartoMask">
+      <circle cx="668" cy="374" r="174" fill="#fff"/>
+      <rect x="646" y="166" width="44" height="416" rx="22" fill="#000"/>
+      <rect x="460" y="352" width="416" height="44" rx="22" fill="#000"/>
+    </mask>
+  </defs>
+
+  <rect x="48" y="48" width="928" height="928" rx="216" fill="url(#tile)"/>
+
+  <path d="M278 196h340l166 166v382c0 62-50 112-112 112H278c-62 0-112-50-112-112V308c0-62 50-112 112-112Z" fill="#fffaf0"/>
+  <path d="M618 196v116c0 28 22 50 50 50h116Z" fill="#dfd1b9"/>
+
+  <circle cx="668" cy="374" r="174" fill="#70aee0" mask="url(#quartoMask)"/>
+
+  <path d="M346 618c0 62 50 112 112 112h96c62 0 112-50 112-112V522H346Z" fill="#ffd84d"/>
+  <circle cx="446" cy="506" r="184" fill="#ffd84d"/>
+  <path d="M570 426c78-8 176 4 230 42 42 30 45 78 4 105-39 26-95 12-130-12-40-27-77-35-124-33Z" fill="#ff8b2e"/>
+  <circle cx="500" cy="470" r="34" fill="#092b35"/>
+  <circle cx="511" cy="459" r="8" fill="#fff"/>
+</svg>

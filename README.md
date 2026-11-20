@@ -61,7 +61,7 @@ example             四表 Join → 汇总 → 透视 → Python/R 报告完整�
 
 - Go 1.26+
 - Node.js 20+
-- Wails CLI 2.13+
+- Wails 2.13.0（`make` 会自动运行固定版本，无需单独安装 CLI）
 - Quarto 1.8+
 - PDF 默认使用 Quarto 内置 Typst；只有自定义 LaTeX 格式时才需要 LaTeX 发行版
 - 示例提供 Python/Jupyter 与 R 两套 Quarto 报告
@@ -79,7 +79,7 @@ Wails   2.13.0
 
 ```bash
 make          # 类型检查、测试并构建当前平台应用
-make dev      # Wails 热重载开发
+make dev      # Wails 热重载开发（Linux 自动使用 WebKitGTK 4.1 标签）
 make test     # Go 测试 + Vue TypeScript 构建
 make run      # 构建后打开应用
 make build-cli # 构建独立 CLI
@@ -105,7 +105,7 @@ wails build -platform linux/amd64 -tags webkit2_41 -trimpath -ldflags="-s -w"
 wails build -platform windows/amd64 -trimpath -ldflags="-s -w"
 ```
 
-Linux 默认使用 `webkit2_41` 构建标签，并通过 `GOTOOLCHAIN=go1.26.0` 固定已验证的 Wails 2.13 工具链。需要兼容仍只提供 WebKitGTK 4.0 的旧发行版时，可使用 `make build-linux LINUX_WEBKIT_TAGS=webkit2_40`，并在目标发行版上验证对应开发包。
+Linux 默认使用 `webkit2_41` 构建标签，并通过 `GOTOOLCHAIN=go1.26.0` 固定已验证的 Wails 2.13 工具链。`make dev`、`make build` 和 `make build-linux` 会通过 Go 运行项目固定的 Wails CLI，避免系统中其他版本管理器把 `wails` 绑定到不兼容的 Go 版本。需要兼容仍只提供 WebKitGTK 4.0 的旧发行版时，可使用 `make dev LINUX_WEBKIT_TAGS=webkit2_40` 或 `make build-linux LINUX_WEBKIT_TAGS=webkit2_40`，并在目标发行版上验证对应开发包。
 
 GitHub Actions 的 `v*` 标签发布会分别编译 macOS Universal（Apple Silicon + Intel）、Windows x64 和 Linux x64。也可以手动触发 `Release` 工作流：默认上传三平台 snapshot ZIP，并创建 `snapshot-<short-sha>` 预发布页面；每个包都包含桌面程序、CLI、安装文档和同一提交的 `duckdb-sql-analytics` Skill。
 

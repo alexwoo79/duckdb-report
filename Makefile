@@ -1,4 +1,6 @@
-WAILS ?= wails
+GO ?= go
+WAILS_VERSION ?= v2.13.0
+WAILS ?= $(GO) run github.com/wailsapp/wails/v2/cmd/wails@$(WAILS_VERSION)
 NPM ?= npm
 UNAME_S := $(shell uname -s)
 LINUX_WEBKIT_TAGS ?= webkit2_41
@@ -49,7 +51,11 @@ build-windows:
 	$(WAILS) build -platform windows/amd64 -trimpath -ldflags="$(BUILD_LDFLAGS)"
 
 dev:
+ifeq ($(UNAME_S),Linux)
+	$(WAILS) dev -tags "$(LINUX_WEBKIT_TAGS)"
+else
 	$(WAILS) dev
+endif
 
 run: build
 ifeq ($(UNAME_S),Darwin)
