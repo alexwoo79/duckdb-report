@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.4 - 2026-11-20
+
+### Fixed
+
+- Resolve relative SQL file paths against the active workspace for `COPY`, common DuckDB readers, `ATTACH`, and `EXPORT DATABASE`, instead of the desktop process working directory.
+- Resolve relative data import paths against the active workspace while leaving absolute paths, URLs, path expressions, and SQL-file-relative `.read` includes unchanged.
+
 ## v2.0.3 - 2026-11-20
 
 ### Changed

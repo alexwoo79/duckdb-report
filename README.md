@@ -25,6 +25,7 @@
 - 报告同时保留 QMD、HTML/PDF、日志与 `analysis.duckdb` 快照，便于审阅和复用。
 - macOS、Windows 与 Linux 发布包支持原生桌面运行，界面沿用 `duckui_notebook` 的图标与视觉风格。
 - SQL 直接按编辑器内容执行，不维护额外参数栏；QMD 在报告运行目录直接读取 `analysis.duckdb`。
+- SQL 中的 `COPY`、`read_csv`、`read_parquet`、`ATTACH` 等文件路径以当前工作区为基准解析；`.read` 继续相对当前 SQL 文件解析。
 - SQL 与报告执行日志、独立产物目录和最近产物入口。
 - 数据资产栏可直接切换工作区、打开工作区目录或导出数据库；设置页用于应用显示名、主题、界面字号和报告运行时状态。
 - 工作区可导出为独立 `.duckdb` 发布快照，使用 R DuckDB 驱动可读取的兼容存储格式。

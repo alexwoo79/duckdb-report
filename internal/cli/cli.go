@@ -132,7 +132,7 @@ func openRuntime(ctx context.Context, exampleFS fs.FS, root string) (*cliRuntime
 	if err != nil {
 		return nil, err
 	}
-	db, err := database.Open(ctx, store.Database)
+	db, err := database.OpenWithBaseDir(ctx, store.Database, store.Root)
 	if err != nil {
 		return nil, err
 	}

@@ -23,14 +23,28 @@ import (
 const maxScriptDepth = 24
 
 type Service struct {
-	mu   sync.Mutex
-	db   *sql.DB
-	path string
+	mu      sync.Mutex
+	db      *sql.DB
+	path    string
+	baseDir string
 }
 
 func Open(ctx context.Context, path string) (*Service, error) {
+	return OpenWithBaseDir(ctx, path, "")
+}
+
+// OpenWithBaseDir opens a database and resolves relative SQL file paths against
+// baseDir instead of the process working directory.
+func OpenWithBaseDir(ctx context.Context, path, baseDir string) (*Service, error) {
 	if strings.TrimSpace(path) == "" {
 		return nil, errors.New("database path is empty")
+	}
+	if strings.TrimSpace(baseDir) != "" {
+		absolute, err := filepath.Abs(baseDir)
+		if err != nil {
+			return nil, fmt.Errorf("resolve database base directory: %w", err)
+		}
+		baseDir = absolute
 	}
 	db, err := sql.Open("duckdb", path)
 	if err != nil {
@@ -42,7 +56,7 @@ func Open(ctx context.Context, path string) (*Service, error) {
 		db.Close()
 		return nil, fmt.Errorf("connect duckdb: %w", err)
 	}
-	return &Service{db: db, path: path}, nil
+	return &Service{db: db, path: path, baseDir: baseDir}, nil
 }
 
 func (s *Service) Close() error {
@@ -70,6 +84,11 @@ func (s *Service) Version(ctx context.Context) (string, error) {
 func (s *Service) Snapshot(ctx context.Context, destination string) error {
 	if strings.TrimSpace(destination) == "" {
 		return errors.New("snapshot destination is empty")
+	}
+	var err error
+	destination, err = s.resolveFilePath(destination)
+	if err != nil {
+		return fmt.Errorf("resolve snapshot destination: %w", err)
 	}
 	if _, err := os.Stat(destination); err == nil {
 		return fmt.Errorf("snapshot destination already exists: %s", destination)
@@ -127,7 +146,11 @@ func (s *Service) Query(ctx context.Context, query string, limit int) (model.Que
 	defer s.mu.Unlock()
 
 	started := time.Now()
-	rows, err := s.db.QueryContext(ctx, query)
+	executable := query
+	if s.baseDir != "" {
+		executable = resolveSQLPaths(query, s.baseDir)
+	}
+	rows, err := s.db.QueryContext(ctx, executable)
 	if err != nil {
 		return model.QueryResult{}, fmt.Errorf("execute sql: %w", err)
 	}
@@ -219,7 +242,11 @@ func (s *Service) Explain(ctx context.Context, query string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	rows, err := s.db.QueryContext(ctx, "EXPLAIN "+query)
+	executable := query
+	if s.baseDir != "" {
+		executable = resolveSQLPaths(query, s.baseDir)
+	}
+	rows, err := s.db.QueryContext(ctx, "EXPLAIN "+executable)
 	if err != nil {
 		return fmt.Errorf("explain sql: %w", err)
 	}
@@ -238,7 +265,7 @@ func ExpandScript(script, baseDir string) (string, error) {
 }
 
 func (s *Service) Import(ctx context.Context, request model.ImportRequest) (model.ImportResult, error) {
-	path, err := filepath.Abs(strings.TrimSpace(request.Path))
+	path, err := s.resolveFilePath(request.Path)
 	if err != nil {
 		return model.ImportResult{}, fmt.Errorf("resolve source path: %w", err)
 	}
@@ -304,6 +331,17 @@ func (s *Service) Import(ctx context.Context, request model.ImportRequest) (mode
 		return model.ImportResult{}, err
 	}
 	return model.ImportResult{Source: source, Tables: tables, Log: logEntries}, nil
+}
+
+func (s *Service) resolveFilePath(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", errors.New("file path is empty")
+	}
+	if s.baseDir != "" && !filepath.IsAbs(value) && !hasURIScheme(value) {
+		value = filepath.Join(s.baseDir, filepath.FromSlash(value))
+	}
+	return filepath.Abs(value)
 }
 
 func (s *Service) DeleteSource(ctx context.Context, source model.Source) error {

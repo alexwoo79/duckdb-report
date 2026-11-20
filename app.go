@@ -81,7 +81,7 @@ func NewApp(exampleFS fs.FS) *App {
 		app.initErr = err
 		return app
 	}
-	db, err := database.Open(context.Background(), store.Database)
+	db, err := database.OpenWithBaseDir(context.Background(), store.Database, store.Root)
 	if err != nil {
 		app.initErr = err
 		return app
@@ -868,7 +868,7 @@ func openWorkspaceRuntime(
 	if err != nil {
 		return appWorkspaceRuntime{}, err
 	}
-	db, err := database.Open(ctx, store.Database)
+	db, err := database.OpenWithBaseDir(ctx, store.Database, store.Root)
 	if err != nil {
 		return appWorkspaceRuntime{}, err
 	}
