@@ -74,6 +74,37 @@ Quarto  1.8.26
 Wails   2.13.0
 ```
 
+### 交互性能设置
+
+DuckDB 默认使用机器一半逻辑核心，并将单进程内存上限设为物理内存的 60%。
+可在启动应用前覆盖：
+
+```bash
+DUCKDB_REPORT_THREADS=4 \
+DUCKDB_REPORT_MEMORY_LIMIT=4GB \
+duckdb_report
+```
+
+Windows PowerShell：
+
+```powershell
+$env:DUCKDB_REPORT_THREADS = "4"
+$env:DUCKDB_REPORT_MEMORY_LIMIT = "4GB"
+.\duckdb_report.exe
+```
+
+`DUCKDB_REPORT_THREADS` 接受 1–1024 的整数；
+`DUCKDB_REPORT_MEMORY_LIMIT` 接受 `B`、`KB`、`MB`、`GB`、`TB` 或百分比。
+
+Linux WebKit 默认使用按需 GPU 加速。如果某些 Wayland/GPU 驱动组合出现空白窗口，
+可关闭硬件加速后重启：
+
+```bash
+DUCKDB_REPORT_WEBVIEW_GPU=never duckdb_report
+```
+
+也可设为 `always` 强制启用，或设为 `on-demand` 恢复默认策略。
+
 ## 构建与运行
 
 ```bash

@@ -60,8 +60,8 @@ const props = defineProps<{
 const emit = defineEmits<{
   "update:modelValue": [value: string];
   run: [query: string];
-  save: [];
-  "save-as": [];
+  save: [value: string];
+  "save-as": [value: string];
 }>();
 
 type SQLNamespaceMap = Record<string, SQLNamespace>;
@@ -81,6 +81,9 @@ const {
 const completionCompartment = new Compartment();
 let editor: EditorView | null = null;
 let syncingFromProps = false;
+let modelSyncTimer: number | undefined;
+
+const MODEL_SYNC_DELAY_MS = 160;
 
 const duckDBDialect = SQLDialect.define({
   ...PostgreSQL.spec,
@@ -260,6 +263,22 @@ function selectedSQL(view: EditorView): string {
     .trim() || document;
 }
 
+function flushModelSync(view: EditorView | null = editor) {
+  if (modelSyncTimer !== undefined) {
+    window.clearTimeout(modelSyncTimer);
+    modelSyncTimer = undefined;
+  }
+  if (view) emit("update:modelValue", view.state.doc.toString());
+}
+
+function scheduleModelSync(view: EditorView) {
+  if (modelSyncTimer !== undefined) window.clearTimeout(modelSyncTimer);
+  modelSyncTimer = window.setTimeout(() => {
+    modelSyncTimer = undefined;
+    emit("update:modelValue", view.state.doc.toString());
+  }, MODEL_SYNC_DELAY_MS);
+}
+
 const customKeymap = [
   {
     key: "Mod-=",
@@ -294,6 +313,7 @@ const customKeymap = [
     key: "Mod-Enter",
     preventDefault: true,
     run: (view: EditorView) => {
+      flushModelSync(view);
       const query = selectedSQL(view);
       if (query.trim()) emit("run", query);
       return true;
@@ -303,6 +323,7 @@ const customKeymap = [
     key: "F5",
     preventDefault: true,
     run: (view: EditorView) => {
+      flushModelSync(view);
       const query = selectedSQL(view);
       if (query.trim()) emit("run", query);
       return true;
@@ -311,16 +332,18 @@ const customKeymap = [
   {
     key: "Mod-Shift-s",
     preventDefault: true,
-    run: () => {
-      emit("save-as");
+    run: (view: EditorView) => {
+      flushModelSync(view);
+      emit("save-as", view.state.doc.toString());
       return true;
     },
   },
   {
     key: "Mod-s",
     preventDefault: true,
-    run: () => {
-      emit("save");
+    run: (view: EditorView) => {
+      flushModelSync(view);
+      emit("save", view.state.doc.toString());
       return true;
     },
   },
@@ -349,6 +372,10 @@ function updateCursorState(state: EditorState) {
 
 function replaceDocument(value: string) {
   if (!editor || editor.state.doc.toString() === value) return;
+  if (modelSyncTimer !== undefined) {
+    window.clearTimeout(modelSyncTimer);
+    modelSyncTimer = undefined;
+  }
   syncingFromProps = true;
   editor.dispatch({
     changes: { from: 0, to: editor.state.doc.length, insert: value },
@@ -384,6 +411,12 @@ onMounted(() => {
         "aria-label": "SQL 编辑器",
         spellcheck: "false",
       }),
+      EditorView.domEventHandlers({
+        blur: () => {
+          flushModelSync();
+          return false;
+        },
+      }),
       completionCompartment.of(completionExtension(props.tables)),
       keymap.of([
         ...customKeymap,
@@ -396,7 +429,7 @@ onMounted(() => {
       ]),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !syncingFromProps) {
-          emit("update:modelValue", update.state.doc.toString());
+          scheduleModelSync(update.view);
         }
         if (update.docChanged || update.selectionSet) {
           updateCursorState(update.state);
@@ -409,6 +442,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  flushModelSync();
   editor?.destroy();
   editor = null;
 });
@@ -425,11 +459,11 @@ watch(
       effects: completionCompartment.reconfigure(completionExtension(tables)),
     });
   },
-  { deep: true },
 );
 
 defineExpose({
   focus: () => editor?.focus(),
+  getValue: () => editor?.state.doc.toString() ?? props.modelValue,
 });
 </script>
 

@@ -38,6 +38,10 @@ export function ListSheets(arg1) {
   return window['go']['main']['App']['ListSheets'](arg1);
 }
 
+export function LoadDataCatalog() {
+  return window['go']['main']['App']['LoadDataCatalog']();
+}
+
 export function LoadSQLCompletions() {
   return window['go']['main']['App']['LoadSQLCompletions']();
 }

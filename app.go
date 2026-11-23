@@ -454,6 +454,15 @@ func (a *App) ImportData(request model.ImportRequest) (model.ImportResult, error
 	return result, nil
 }
 
+func (a *App) LoadDataCatalog() (model.DataCatalog, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.initErr != nil {
+		return model.DataCatalog{}, a.initErr
+	}
+	return a.dataCatalogLocked()
+}
+
 func (a *App) DeleteSource(source model.Source) (model.DataCatalog, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()

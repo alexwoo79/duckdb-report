@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.0.7 - 2026-11-23
+
+### Changed
+
+- Keep SQL and QMD editing inside CodeMirror and defer Vue model synchronization until typing pauses, while forcing a final synchronization before run, render, save, and blur.
+- Refresh only the database catalog after SQL execution and rebuild completions only when the table catalog changes.
+- Cache report runtime detection for one minute and reuse the number formatter in query results.
+- Enable Linux WebKit GPU acceleration on demand by default, with `DUCKDB_REPORT_WEBVIEW_GPU=never` as a compatibility fallback.
+- Default DuckDB to half the available CPU threads and a 60% memory limit, configurable through `DUCKDB_REPORT_THREADS` and `DUCKDB_REPORT_MEMORY_LIMIT`.
+
 ## v2.0.6 - 2026-11-21
 
 ### Fixed

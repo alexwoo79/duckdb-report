@@ -191,6 +191,7 @@ export interface Backend {
     table: string;
     sheet: string;
   }): Promise<ImportResult>;
+  LoadDataCatalog(): Promise<DataCatalog>;
   DeleteSource(source: DataSource): Promise<DataCatalog>;
   ResetUserData(): Promise<DataCatalog>;
   RunSQL(query: string, limit: number, basePath: string): Promise<QueryResult>;

@@ -20,6 +20,8 @@ export function ImportWorkflowPackage():Promise<model.Workflow>;
 
 export function ListSheets(arg1:string):Promise<Array<string>>;
 
+export function LoadDataCatalog():Promise<model.DataCatalog>;
+
 export function LoadSQLCompletions():Promise<model.SQLCompletionCatalog>;
 
 export function OpenOutput(arg1:string,arg2:string):Promise<void>;

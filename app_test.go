@@ -133,6 +133,19 @@ func newWorkspaceSwitchTestApp(t *testing.T, root string) *App {
 	return app
 }
 
+func TestLoadDataCatalog(t *testing.T) {
+	t.Parallel()
+	app := newWorkspaceSwitchTestApp(t, t.TempDir())
+
+	catalog, err := app.LoadDataCatalog()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if catalog.Databases == nil || catalog.Tables == nil || catalog.Sources == nil {
+		t.Fatalf("LoadDataCatalog() returned nil collections: %#v", catalog)
+	}
+}
+
 func TestSaveSettingsSwitchesWorkspace(t *testing.T) {
 	t.Parallel()
 	oldRoot := t.TempDir()

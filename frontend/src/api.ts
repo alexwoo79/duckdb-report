@@ -1,5 +1,9 @@
 import type { Backend } from "./types";
 
+const numberFormatter = new Intl.NumberFormat("zh-CN", {
+  maximumFractionDigits: 4,
+});
+
 export function backend(): Backend {
   const value = window.go?.main?.App;
   if (!value) {
@@ -41,7 +45,7 @@ export function resolveTemplate(
 export function formatNumber(value: unknown): string {
   if (value === null || value === undefined) return "NULL";
   if (typeof value === "number") {
-    return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 4 }).format(value);
+    return numberFormatter.format(value);
   }
   return String(value);
 }

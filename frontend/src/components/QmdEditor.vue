@@ -50,9 +50,9 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   "update:modelValue": [value: string];
-  render: [format: "html" | "pdf"];
-  save: [];
-  "save-as": [];
+  render: [format: "html" | "pdf", value: string];
+  save: [value: string];
+  "save-as": [value: string];
   new: [];
 }>();
 
@@ -71,6 +71,9 @@ const {
 
 let editor: EditorView | null = null;
 let syncingFromProps = false;
+let modelSyncTimer: number | undefined;
+
+const MODEL_SYNC_DELAY_MS = 160;
 
 const snippetSection = { name: "Quarto 片段", rank: 1 };
 const yamlSection = { name: "YAML 选项", rank: 2 };
@@ -415,8 +418,25 @@ function toggleHTMLComment(view: EditorView): boolean {
   return true;
 }
 
+function flushModelSync(view: EditorView | null = editor) {
+  if (modelSyncTimer !== undefined) {
+    window.clearTimeout(modelSyncTimer);
+    modelSyncTimer = undefined;
+  }
+  if (view) emit("update:modelValue", view.state.doc.toString());
+}
+
+function scheduleModelSync(view: EditorView) {
+  if (modelSyncTimer !== undefined) window.clearTimeout(modelSyncTimer);
+  modelSyncTimer = window.setTimeout(() => {
+    modelSyncTimer = undefined;
+    emit("update:modelValue", view.state.doc.toString());
+  }, MODEL_SYNC_DELAY_MS);
+}
+
 function renderFromSelection(view: EditorView, format: "html" | "pdf"): boolean {
-  emit("render", format);
+  flushModelSync(view);
+  emit("render", format, view.state.doc.toString());
   view.focus();
   return true;
 }
@@ -464,16 +484,18 @@ const customKeymap = [
   {
     key: "Mod-s",
     preventDefault: true,
-    run: () => {
-      emit("save");
+    run: (view: EditorView) => {
+      flushModelSync(view);
+      emit("save", view.state.doc.toString());
       return true;
     },
   },
   {
     key: "Mod-Shift-s",
     preventDefault: true,
-    run: () => {
-      emit("save-as");
+    run: (view: EditorView) => {
+      flushModelSync(view);
+      emit("save-as", view.state.doc.toString());
       return true;
     },
   },
@@ -537,6 +559,10 @@ function updateCursorState(state: EditorState) {
 
 function replaceDocument(value: string) {
   if (!editor || editor.state.doc.toString() === value) return;
+  if (modelSyncTimer !== undefined) {
+    window.clearTimeout(modelSyncTimer);
+    modelSyncTimer = undefined;
+  }
   syncingFromProps = true;
   editor.dispatch({
     changes: { from: 0, to: editor.state.doc.length, insert: value },
@@ -586,6 +612,12 @@ onMounted(() => {
         "aria-label": "QMD 编辑器",
         spellcheck: "false",
       }),
+      EditorView.domEventHandlers({
+        blur: () => {
+          flushModelSync();
+          return false;
+        },
+      }),
       keymap.of([
         ...customKeymap,
         ...completionKeymap,
@@ -597,7 +629,7 @@ onMounted(() => {
       ]),
       EditorView.updateListener.of((update) => {
         if (update.docChanged && !syncingFromProps) {
-          emit("update:modelValue", update.state.doc.toString());
+          scheduleModelSync(update.view);
         }
         if (update.docChanged || update.selectionSet) {
           updateCursorState(update.state);
@@ -610,6 +642,7 @@ onMounted(() => {
 });
 
 onBeforeUnmount(() => {
+  flushModelSync();
   editor?.destroy();
   editor = null;
 });
@@ -621,6 +654,7 @@ watch(
 
 defineExpose({
   focus: () => editor?.focus(),
+  getValue: () => editor?.state.doc.toString() ?? props.modelValue,
 });
 </script>
 

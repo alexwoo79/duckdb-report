@@ -3,7 +3,7 @@
     -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
     "Microsoft YaHei", "Segoe UI", sans-serif;
   font-synthesis: none;
-  text-rendering: optimizeLegibility;
+  text-rendering: auto;
   color-scheme: dark;
   --bg: #111418;
   --bg-deep: #0c0f12;
@@ -114,7 +114,6 @@ textarea:focus-visible {
   padding: 0 14px 0 92px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 84%, var(--bg-deep));
-  backdrop-filter: blur(18px);
 }
 
 .brand,
@@ -2424,7 +2423,6 @@ p {
   border-radius: 10px;
   background: color-mix(in srgb, var(--panel) 96%, transparent);
   box-shadow: 0 -6px 20px rgba(35, 58, 82, 0.09);
-  backdrop-filter: blur(14px);
 }
 
 .settings-view {

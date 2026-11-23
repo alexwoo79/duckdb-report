@@ -13,6 +13,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alexwoo79/duckdb-report/internal/database"
@@ -23,10 +24,15 @@ import (
 )
 
 type Renderer struct {
-	quarto   string
-	store    *workspace.Store
-	database *database.Service
+	quarto               string
+	store                *workspace.Store
+	database             *database.Service
+	environmentMu        sync.Mutex
+	environment          model.Environment
+	environmentCheckedAt time.Time
 }
+
+const environmentCacheTTL = time.Minute
 
 func NewRenderer(quarto string, store *workspace.Store, database *database.Service) *Renderer {
 	EnsureRuntimePath()
@@ -37,6 +43,13 @@ func NewRenderer(quarto string, store *workspace.Store, database *database.Servi
 }
 
 func (r *Renderer) Environments(ctx context.Context) model.Environment {
+	r.environmentMu.Lock()
+	defer r.environmentMu.Unlock()
+	if !r.environmentCheckedAt.IsZero() &&
+		time.Since(r.environmentCheckedAt) < environmentCacheTTL {
+		return r.environment
+	}
+
 	result := model.Environment{}
 	result.RPath, _ = exec.LookPath("Rscript")
 	if result.RPath != "" {
@@ -58,6 +71,8 @@ func (r *Renderer) Environments(ctx context.Context) model.Environment {
 			result.DuckDBVersion = version
 		}
 	}
+	r.environment = result
+	r.environmentCheckedAt = time.Now()
 	return result
 }
 

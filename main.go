@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"os/signal"
+	"strings"
 
 	"github.com/alexwoo79/duckdb-report/internal/cli"
 	"github.com/wailsapp/wails/v2"
@@ -61,7 +62,7 @@ func runDesktop() {
 		Linux: &linux.Options{
 			Icon:             appIcon,
 			ProgramName:      "duckdb_report",
-			WebviewGpuPolicy: linux.WebviewGpuPolicyNever,
+			WebviewGpuPolicy: linuxWebviewGpuPolicy(),
 		},
 		Mac: &mac.Options{
 			TitleBar: mac.TitleBarHiddenInset(),
@@ -74,5 +75,16 @@ func runDesktop() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "run application:", err)
 		os.Exit(1)
+	}
+}
+
+func linuxWebviewGpuPolicy() linux.WebviewGpuPolicy {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("DUCKDB_REPORT_WEBVIEW_GPU"))) {
+	case "never", "off", "false":
+		return linux.WebviewGpuPolicyNever
+	case "always":
+		return linux.WebviewGpuPolicyAlways
+	default:
+		return linux.WebviewGpuPolicyOnDemand
 	}
 }

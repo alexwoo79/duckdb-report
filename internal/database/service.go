@@ -9,7 +9,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +24,14 @@ import (
 )
 
 const maxScriptDepth = 24
+const (
+	defaultDuckDBMemoryLimit = "60%"
+	maxDuckDBThreads         = 1024
+)
+
+var duckDBMemoryLimitPattern = regexp.MustCompile(
+	`^[0-9]+(?:\.[0-9]+)?(?:B|KB|MB|GB|TB|%)$`,
+)
 
 type Service struct {
 	mu      sync.Mutex
@@ -56,7 +67,44 @@ func OpenWithBaseDir(ctx context.Context, path, baseDir string) (*Service, error
 		db.Close()
 		return nil, fmt.Errorf("connect duckdb: %w", err)
 	}
+	if err := configureResources(ctx, db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	return &Service{db: db, path: path, baseDir: baseDir}, nil
+}
+
+func configureResources(ctx context.Context, db *sql.DB) error {
+	query := fmt.Sprintf("SET threads = %d", duckDBThreads())
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("set duckdb threads: %w", err)
+	}
+	query = "SET memory_limit = " + quoteLiteral(duckDBMemoryLimit())
+	if _, err := db.ExecContext(ctx, query); err != nil {
+		return fmt.Errorf("set duckdb memory limit: %w", err)
+	}
+	return nil
+}
+
+func duckDBThreads() int {
+	value := strings.TrimSpace(os.Getenv("DUCKDB_REPORT_THREADS"))
+	if value != "" {
+		threads, err := strconv.Atoi(value)
+		if err == nil && threads >= 1 && threads <= maxDuckDBThreads {
+			return threads
+		}
+	}
+	return max(1, runtime.NumCPU()/2)
+}
+
+func duckDBMemoryLimit() string {
+	value := strings.ToUpper(strings.TrimSpace(
+		os.Getenv("DUCKDB_REPORT_MEMORY_LIMIT"),
+	))
+	if duckDBMemoryLimitPattern.MatchString(value) {
+		return value
+	}
+	return defaultDuckDBMemoryLimit
 }
 
 func (s *Service) Close() error {

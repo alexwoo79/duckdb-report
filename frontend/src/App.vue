@@ -105,6 +105,8 @@ const sidebarWidthStorageKey = "duckdb-report-sidebar-width";
 const sidebarWidth = ref(loadSidebarWidth());
 const sqlSplitRef = ref<HTMLElement | null>(null);
 const reportSplitRef = ref<HTMLElement | null>(null);
+const sqlEditorRef = ref<{ getValue(): string } | null>(null);
+const qmdEditorRef = ref<{ getValue(): string } | null>(null);
 const sqlCompletionTables = ref<SQLCompletionTable[]>([]);
 let stopSplitResize: (() => void) | undefined;
 let stopSidebarResize: (() => void) | undefined;
@@ -992,6 +994,42 @@ async function loadSQLCompletions() {
   }
 }
 
+function currentSQLContent() {
+  return sqlEditorRef.value?.getValue() ?? sqlContent.value;
+}
+
+function currentReportContent() {
+  return qmdEditorRef.value?.getValue() ?? reportContent.value;
+}
+
+function tableCatalogSignature(values: TableRef[]) {
+  return values
+    .map((table) => `${table.catalog}.${table.schema}.${table.name}:${table.type}`)
+    .join("|");
+}
+
+async function refreshDataCatalog() {
+  const catalog = await backend().LoadDataCatalog();
+  const previousSignature = tableCatalogSignature(tables.value);
+  const changed =
+    tableCatalogSignature(catalog.tables) !== previousSignature;
+  if (state.value) {
+    state.value.databases = catalog.databases;
+    state.value.tables = catalog.tables;
+    state.value.sources = catalog.sources;
+  }
+  if (changed) {
+    await loadSQLCompletions();
+  }
+  return changed;
+}
+
+function scheduleSQLCompletionRefresh() {
+  window.setTimeout(() => {
+    void loadSQLCompletions();
+  }, 200);
+}
+
 function onWorkflowEvent(event: StepEvent) {
   stepStates[event.stepId] = {
     status: event.status,
@@ -1164,10 +1202,13 @@ async function confirmImport() {
 
 function applyDataCatalog(catalog: DataCatalog) {
   if (!state.value) return;
+  const previousSignature = tableCatalogSignature(tables.value);
   state.value.databases = catalog.databases;
   state.value.tables = catalog.tables;
   state.value.sources = catalog.sources;
-  void loadSQLCompletions();
+  if (tableCatalogSignature(catalog.tables) !== previousSignature) {
+    void loadSQLCompletions();
+  }
 }
 
 async function removeSource(source: DataSource) {
@@ -1205,7 +1246,7 @@ async function previewTable(table: TableRef) {
   selectedSQL.value = "";
   sqlResult.value = null;
   sqlContent.value = `SELECT *\nFROM "${table.catalog}"."${table.schema}"."${table.name}"\nLIMIT 200;`;
-  await runSQL(false);
+  await runSQL(false, sqlContent.value);
 }
 
 async function loadSQL(path: string) {
@@ -1222,16 +1263,17 @@ async function loadSQL(path: string) {
   }
 }
 
-async function saveSQL() {
+async function saveSQL(contentOverride?: string) {
+  const content = contentOverride ?? currentSQLContent();
   if (!selectedSQL.value) {
-    await saveSQLAs();
+    await saveSQLAs(content);
     return;
   }
   try {
-    const saved = await backend().SaveText(selectedSQL.value, sqlContent.value);
+    const saved = await backend().SaveText(selectedSQL.value, content);
     selectedSQL.value = saved.path;
+    sqlContent.value = saved.content;
     notify("SQL 已保存", "success");
-    await refreshState();
   } catch (error) {
     notify(errorMessage(error), "error");
   }
@@ -1245,16 +1287,25 @@ function startNewSQL() {
 
 async function newSQLFile() {
   startNewSQL();
-  await saveSQLAs();
+  await saveSQLAs(sqlContent.value);
 }
 
-async function saveSQLAs() {
+async function saveSQLAs(contentOverride?: string) {
+  const content = contentOverride ?? currentSQLContent();
   try {
-    const saved = await backend().SaveSQLAs(sqlContent.value);
+    const saved = await backend().SaveSQLAs(content);
     if (!saved.path) return;
     selectedSQL.value = saved.path;
     sqlContent.value = saved.content;
-    await refreshState(false);
+    if (
+      state.value &&
+      !state.value.sqlFiles.some((file) => file.path === saved.path)
+    ) {
+      state.value.sqlFiles.push({
+        name: baseName(saved.path),
+        path: saved.path,
+      });
+    }
     notify(`SQL 已另存为：${saved.path}`, "success");
   } catch (error) {
     notify(errorMessage(error), "error");
@@ -1262,8 +1313,9 @@ async function saveSQLAs() {
 }
 
 async function runSQL(showNotification = true, queryOverride?: string) {
-  const content = queryOverride ?? sqlContent.value;
+  const content = queryOverride ?? currentSQLContent();
   if (sqlBusy.value || !content.trim()) return;
+  sqlContent.value = content;
   sqlBusy.value = true;
   const started = performance.now();
   try {
@@ -1279,8 +1331,13 @@ async function runSQL(showNotification = true, queryOverride?: string) {
     notify(message, "error");
   } finally {
     sqlBusy.value = false;
-    // DDL and scripts can change the catalog even when a later statement fails.
-    await refreshState();
+    try {
+      // DDL and scripts can change the catalog even when a later statement fails.
+      const catalogChanged = await refreshDataCatalog();
+      if (!catalogChanged) scheduleSQLCompletionRefresh();
+    } catch (error) {
+      pushLog("error", `数据目录刷新失败：${errorMessage(error)}`);
+    }
   }
 }
 
@@ -1331,11 +1388,16 @@ function startNewQMD() {
 
 async function newQMDFile() {
   startNewQMD();
-  await saveQMDAs();
+  await saveQMDAs(reportContent.value);
 }
 
-async function renderReport(format: "html" | "pdf") {
-  if (!reportContent.value.trim() || reportBusy.value) return;
+async function renderReport(
+  format: "html" | "pdf",
+  contentOverride?: string,
+) {
+  const content = contentOverride ?? currentReportContent();
+  if (!content.trim() || reportBusy.value) return;
+  reportContent.value = content;
   if (qmdDependencyError.value) {
     notify(qmdDependencyError.value, "error");
     return;
@@ -1350,7 +1412,7 @@ async function renderReport(format: "html" | "pdf") {
   logsOpen.value = true;
   try {
     const result = await backend().RenderReport({
-      content: reportContent.value,
+      content,
       format,
       query: "",
       params: {},
@@ -1375,32 +1437,42 @@ async function renderReport(format: "html" | "pdf") {
   }
 }
 
-function renderReportFromEditor(format: "html" | "pdf") {
-  void renderReport(format);
+function renderReportFromEditor(format: "html" | "pdf", content: string) {
+  void renderReport(format, content);
 }
 
-async function saveTemplate() {
+async function saveTemplate(contentOverride?: string) {
+  const content = contentOverride ?? currentReportContent();
   if (!selectedTemplate.value) {
-    await saveQMDAs();
+    await saveQMDAs(content);
     return;
   }
   try {
-    const saved = await backend().SaveText(selectedTemplate.value, reportContent.value);
+    const saved = await backend().SaveText(selectedTemplate.value, content);
     selectedTemplate.value = saved.path;
+    reportContent.value = saved.content;
     notify("QMD 已保存", "success");
-    await refreshState();
   } catch (error) {
     notify(errorMessage(error), "error");
   }
 }
 
-async function saveQMDAs() {
+async function saveQMDAs(contentOverride?: string) {
+  const content = contentOverride ?? currentReportContent();
   try {
-    const saved = await backend().SaveQMDAs(reportContent.value);
+    const saved = await backend().SaveQMDAs(content);
     if (!saved.path) return;
     selectedTemplate.value = saved.path;
     reportContent.value = saved.content;
-    await refreshState(false);
+    if (
+      state.value &&
+      !state.value.templates.some((file) => file.path === saved.path)
+    ) {
+      state.value.templates.push({
+        name: baseName(saved.path),
+        path: saved.path,
+      });
+    }
     notify(`QMD 已另存为：${saved.path}`, "success");
   } catch (error) {
     notify(errorMessage(error), "error");
@@ -2045,10 +2117,10 @@ onBeforeUnmount(() => {
               <button class="ghost-button" @click="newSQLFile">
                 <AppIcon name="plus" :size="15" /> 新建 SQL
               </button>
-              <button class="ghost-button" @click="saveSQL">
+              <button class="ghost-button" @click="saveSQL()">
                 <AppIcon name="save" :size="15" /> 保存
               </button>
-              <button class="ghost-button" @click="saveSQLAs">
+              <button class="ghost-button" @click="saveSQLAs()">
                 <AppIcon name="file" :size="15" /> 另存为
               </button>
               <button class="primary-button" :disabled="sqlBusy" @click="runSQL()">
@@ -2078,6 +2150,7 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <SqlEditor
+                ref="sqlEditorRef"
                 v-model="sqlContent"
                 :tables="sqlCompletionTables"
                 :busy="sqlBusy"
@@ -2151,10 +2224,10 @@ onBeforeUnmount(() => {
               <button class="ghost-button" @click="newQMDFile">
                 <AppIcon name="plus" :size="15" /> 新建 QMD
               </button>
-              <button class="ghost-button" @click="saveTemplate">
+              <button class="ghost-button" @click="saveTemplate()">
                 <AppIcon name="save" :size="15" /> 保存
               </button>
-              <button class="ghost-button" @click="saveQMDAs">
+              <button class="ghost-button" @click="saveQMDAs()">
                 <AppIcon name="file" :size="15" /> 另存为
               </button>
               <button class="secondary-button" :disabled="reportBusy || !!qmdDependencyError" :title="qmdDependencyError" @click="renderReport('pdf')">
@@ -2201,6 +2274,7 @@ onBeforeUnmount(() => {
                 </div>
               </div>
               <QmdEditor
+                ref="qmdEditorRef"
                 v-model="reportContent"
                 :busy="reportBusy"
                 @render="renderReportFromEditor"
