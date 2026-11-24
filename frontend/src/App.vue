@@ -2510,6 +2510,12 @@ onBeforeUnmount(() => {
                 </div>
               </section>
 
+              <section class="settings-card settings-about">
+                <span class="eyebrow">ABOUT</span>
+                <h2>{{ state?.settings.displayName }}</h2>
+                <p>本地 DuckDB + SQL + Quarto 分析工作台。数据与报告默认不会上传到外部服务。</p>
+                <code>duckdb_report {{ state?.settings.version }} · Go + Vue 3 + Wails</code>
+              </section>
             </div>
 
             <div class="settings-column">
@@ -2600,13 +2606,6 @@ onBeforeUnmount(() => {
                     <span class="runtime-check-status">{{ state?.environment.pdfAvailable ? "可用" : "缺失" }}</span>
                   </div>
                 </div>
-              </section>
-
-              <section class="settings-card settings-about">
-                <span class="eyebrow">ABOUT</span>
-                <h2>{{ state?.settings.displayName }}</h2>
-                <p>本地 DuckDB + SQL + Quarto 分析工作台。数据与报告默认不会上传到外部服务。</p>
-                <code>duckdb_report {{ state?.settings.version }} · Go + Vue 3 + Wails</code>
               </section>
             </div>
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.9 - 2026-11-24
+
+### Changed
+
+- Rebalance the Settings page into two independently stacked columns so cards no longer leave blank gaps from row-height mismatches.
+
 ## v2.0.8 - 2026-11-24
 
 ### Added

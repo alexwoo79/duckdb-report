@@ -2471,7 +2471,10 @@ p {
 }
 
 .settings-column {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
 }
 
 .settings-card {
