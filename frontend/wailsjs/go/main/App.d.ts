@@ -4,7 +4,11 @@ import {model} from '../models';
 
 export function Bootstrap():Promise<model.Bootstrap>;
 
+export function CheckForUpdates():Promise<model.UpdateInfo>;
+
 export function DeleteSource(arg1:model.Source):Promise<model.DataCatalog>;
+
+export function DownloadUpdate():Promise<model.UpdateDownload>;
 
 export function ExportQueryCSV(arg1:model.QueryResult):Promise<string>;
 
@@ -24,7 +28,11 @@ export function LoadDataCatalog():Promise<model.DataCatalog>;
 
 export function LoadSQLCompletions():Promise<model.SQLCompletionCatalog>;
 
+export function OpenDownloadedUpdate():Promise<void>;
+
 export function OpenOutput(arg1:string,arg2:string):Promise<void>;
+
+export function OpenUpdateRelease():Promise<void>;
 
 export function OpenWorkspace():Promise<void>;
 

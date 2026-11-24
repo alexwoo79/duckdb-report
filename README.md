@@ -28,6 +28,7 @@
 - SQL 中的 `COPY`、`read_csv`、`read_parquet`、`ATTACH` 等文件路径以当前工作区为基准解析；`.read` 继续相对当前 SQL 文件解析。
 - SQL 与报告执行日志、独立产物目录和最近产物入口。
 - 数据资产栏可直接切换工作区、打开工作区目录或导出数据库；设置页用于应用显示名、主题、界面字号和报告运行时状态。
+- 应用启动后静默跟踪 GitHub 最新正式 Release，并在左下角设置按钮显示新版本角标；设置页可查看发布说明、下载当前平台更新包并校验 SHA-256。
 - 工作区可导出为独立 `.duckdb` 发布快照，使用 R DuckDB 驱动可读取的兼容存储格式。
 - 深色/浅色主题，布局延续 `duckui_notebook` 的三栏工作台和低干扰工具栏风格。
 
@@ -38,6 +39,7 @@ main.go / app.go    Wails 桌面入口与前端绑定
 internal/cli        CLI 命令树与无界面工作区执行
 internal/database   DuckDB 会话、数据导入、SQL 执行
 internal/report     Quarto 渲染与报告表格生成
+internal/update     GitHub Release 跟踪、平台包选择与校验下载
 internal/workspace  工作区、模板、参数与产物管理
 internal/preview    受控 HTML/PDF 预览路由
 frontend            Vue 3 + TypeScript + Vite
@@ -55,6 +57,12 @@ example             四表 Join → 汇总 → 透视 → Python/R 报告完整�
 - `duckdb-report-v*-linux-amd64.zip`
 
 详细环境、Quarto、R、Python、PDF 中文字体及资源目录说明见 [安装文档](docs/INSTALL.md)。
+
+## 软件更新
+
+应用启动后会查询 GitHub 最新正式 Release，并每隔六小时再次检查。发现比当前版本更新的正式发布时，左下角“设置”按钮会出现版本角标；设置页会展示 Release 说明、当前平台对应安装包和下载入口。
+
+更新包保存在用户下载目录的 `duckdb-report-updates/` 子目录中。下载完成前会对照 Release 内的 `checksums.txt` 校验 SHA-256，校验失败的文件不会替换已有更新包。应用不会直接覆盖正在运行的安装；点击“打开更新包”后，可按操作系统提示完成替换或安装。
 
 ## 源码构建环境
 

@@ -111,6 +111,24 @@ type SettingsInfo struct {
 	UIFontSize        int    `json:"uiFontSize"`
 }
 
+type UpdateInfo struct {
+	CurrentVersion string `json:"currentVersion"`
+	LatestVersion  string `json:"latestVersion"`
+	Available      bool   `json:"available"`
+	ReleaseName    string `json:"releaseName"`
+	ReleaseURL     string `json:"releaseUrl"`
+	PublishedAt    string `json:"publishedAt"`
+	ReleaseNotes   string `json:"releaseNotes"`
+	AssetName      string `json:"assetName"`
+	AssetSize      int64  `json:"assetSize"`
+}
+
+type UpdateDownload struct {
+	Name string `json:"name"`
+	Path string `json:"path"`
+	Size int64  `json:"size"`
+}
+
 type Bootstrap struct {
 	Workspace   string        `json:"workspace"`
 	Database    string        `json:"database"`

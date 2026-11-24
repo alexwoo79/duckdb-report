@@ -6,8 +6,16 @@ export function Bootstrap() {
   return window['go']['main']['App']['Bootstrap']();
 }
 
+export function CheckForUpdates() {
+  return window['go']['main']['App']['CheckForUpdates']();
+}
+
 export function DeleteSource(arg1) {
   return window['go']['main']['App']['DeleteSource'](arg1);
+}
+
+export function DownloadUpdate() {
+  return window['go']['main']['App']['DownloadUpdate']();
 }
 
 export function ExportQueryCSV(arg1) {
@@ -46,8 +54,16 @@ export function LoadSQLCompletions() {
   return window['go']['main']['App']['LoadSQLCompletions']();
 }
 
+export function OpenDownloadedUpdate() {
+  return window['go']['main']['App']['OpenDownloadedUpdate']();
+}
+
 export function OpenOutput(arg1, arg2) {
   return window['go']['main']['App']['OpenOutput'](arg1, arg2);
+}
+
+export function OpenUpdateRelease() {
+  return window['go']['main']['App']['OpenUpdateRelease']();
 }
 
 export function OpenWorkspace() {

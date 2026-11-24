@@ -31,6 +31,8 @@ import type {
   SQLCompletionTable,
   StepEvent,
   TableRef,
+  UpdateDownload,
+  UpdateInfo,
   ViewName,
   Workflow,
   WorkflowStep,
@@ -61,6 +63,11 @@ const inspectorOpen = ref(true);
 const logsOpen = ref(true);
 const settingsBusy = ref(false);
 const exportWorkspaceBusy = ref(false);
+const updateBusy = ref(false);
+const updateDownloadBusy = ref(false);
+const updateInfo = ref<UpdateInfo | null>(null);
+const updateError = ref("");
+const updateDownloaded = ref<UpdateDownload | null>(null);
 const settingsDraft = ref<AppSettings>({
   displayName: "",
   workspace: "",
@@ -74,6 +81,7 @@ const reportBusy = ref(false);
 const theme = ref<"dark" | "light">("dark");
 const toast = ref<{ text: string; kind: "info" | "error" | "success" } | null>(null);
 let toastTimer: number | undefined;
+let updatePollTimer: number | undefined;
 
 const sqlFiles = computed(() => state.value?.sqlFiles ?? []);
 const templates = computed(() => state.value?.templates ?? []);
@@ -1526,6 +1534,90 @@ async function saveSettings() {
   }
 }
 
+function releaseVersion(value: string | undefined): string {
+  if (!value) return "未知";
+  return value.startsWith("v") ? value : `v${value}`;
+}
+
+function formatBytes(value: number): string {
+  if (!value) return "大小未知";
+  if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
+  if (value >= 1024) return `${Math.round(value / 1024)} KB`;
+  return `${value} B`;
+}
+
+function formatReleaseDate(value: string): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+async function checkForUpdates(showFeedback = true) {
+  if (updateBusy.value) return;
+  updateBusy.value = true;
+  updateError.value = "";
+  try {
+    const previousLatest = updateInfo.value?.latestVersion;
+    const info = await backend().CheckForUpdates();
+    updateInfo.value = info;
+    if (previousLatest !== info.latestVersion) {
+      updateDownloaded.value = null;
+    }
+    if (info.available) {
+      pushLog("info", `发现新版本 ${releaseVersion(info.latestVersion)}。`);
+      if (showFeedback) {
+        notify(`发现新版本 ${releaseVersion(info.latestVersion)}`, "success");
+      }
+    } else if (showFeedback) {
+      notify("当前已是最新正式版本", "success");
+    }
+  } catch (error) {
+    updateError.value = errorMessage(error);
+    if (showFeedback) {
+      notify(`检查更新失败：${updateError.value}`, "error");
+    }
+  } finally {
+    updateBusy.value = false;
+  }
+}
+
+async function downloadUpdate() {
+  if (updateDownloadBusy.value || !updateInfo.value?.available) return;
+  updateDownloadBusy.value = true;
+  updateError.value = "";
+  try {
+    const download = await backend().DownloadUpdate();
+    updateDownloaded.value = download;
+    notify("更新包已下载并通过 SHA-256 校验", "success");
+  } catch (error) {
+    updateError.value = errorMessage(error);
+    notify(`下载更新失败：${updateError.value}`, "error");
+  } finally {
+    updateDownloadBusy.value = false;
+  }
+}
+
+async function openUpdateRelease() {
+  try {
+    await backend().OpenUpdateRelease();
+  } catch (error) {
+    notify(errorMessage(error), "error");
+  }
+}
+
+async function openDownloadedUpdate() {
+  try {
+    await backend().OpenDownloadedUpdate();
+  } catch (error) {
+    notify(errorMessage(error), "error");
+  }
+}
+
 async function openWorkspaceFolder() {
   try {
     await backend().OpenWorkspace();
@@ -1600,12 +1692,21 @@ onMounted(async () => {
   const preferredDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   setTheme(savedTheme === "light" || savedTheme === "dark" ? savedTheme : preferredDark ? "dark" : "light");
   window.addEventListener("resize", handleWindowResize);
-  await loadInitial();
+  const loaded = await loadInitial();
+  if (loaded) {
+    void checkForUpdates(false);
+    updatePollTimer = window.setInterval(
+      () => void checkForUpdates(false),
+      6 * 60 * 60 * 1000,
+    );
+  }
 });
 
 onBeforeUnmount(() => {
   stopSplitResize?.();
   stopSidebarResize?.();
+  if (updatePollTimer) window.clearInterval(updatePollTimer);
+  if (toastTimer) window.clearTimeout(toastTimer);
   window.removeEventListener("resize", handleWindowResize);
 });
 </script>
@@ -1691,12 +1792,26 @@ onBeforeUnmount(() => {
         </button>
         <button
           class="rail-button"
-          :class="{ active: activeView === 'settings' }"
-          title="设置"
+          :class="{
+            active: activeView === 'settings',
+            'update-available': updateInfo?.available,
+          }"
+          :title="
+            updateInfo?.available
+              ? `设置 · 新版本 ${releaseVersion(updateInfo.latestVersion)} 可用`
+              : '设置'
+          "
           @click="activeView = 'settings'"
         >
           <AppIcon name="settings" :size="19" />
           <span>设置</span>
+          <span
+            v-if="updateInfo?.available"
+            class="rail-update-badge"
+            :aria-label="`新版本 ${releaseVersion(updateInfo.latestVersion)} 可用`"
+          >
+            1
+          </span>
         </button>
       </nav>
 
@@ -2494,6 +2609,121 @@ onBeforeUnmount(() => {
                 <code>duckdb_report {{ state?.settings.version }} · Go + Vue 3 + Wails</code>
               </section>
             </div>
+
+            <section class="settings-card settings-update-card">
+              <div class="settings-card-head">
+                <div class="settings-card-icon"><AppIcon name="download" :size="19" /></div>
+                <div>
+                  <span class="eyebrow">SOFTWARE UPDATE</span>
+                  <h2>软件更新</h2>
+                </div>
+                <span
+                  class="update-state-pill"
+                  role="status"
+                  aria-live="polite"
+                  :class="{
+                    available: updateInfo?.available,
+                    current: updateInfo && !updateInfo.available,
+                    error: updateError,
+                  }"
+                >
+                  {{
+                    updateBusy
+                      ? "检查中"
+                      : updateError
+                        ? "操作失败"
+                        : updateInfo?.available
+                          ? "有新版本"
+                          : updateInfo
+                            ? "已是最新"
+                            : "尚未检查"
+                  }}
+                </span>
+              </div>
+              <p class="settings-description">
+                应用会静默跟踪 GitHub Release，并在发现新版时点亮左下角设置按钮的角标。
+                更新包下载后会自动执行 SHA-256 校验。
+              </p>
+
+              <div class="update-version-row">
+                <div class="update-version-cell">
+                  <span>当前版本</span>
+                  <strong>{{ releaseVersion(state?.settings.version) }}</strong>
+                </div>
+                <AppIcon name="chevron" :size="16" />
+                <div class="update-version-cell latest">
+                  <span>GitHub 最新正式版</span>
+                  <strong>{{ releaseVersion(updateInfo?.latestVersion) }}</strong>
+                </div>
+                <div class="update-actions">
+                  <button
+                    class="ghost-button small"
+                    :disabled="updateBusy"
+                    @click="checkForUpdates()"
+                  >
+                    <AppIcon name="refresh" :size="14" />
+                    {{ updateBusy ? "检查中…" : "检查更新" }}
+                  </button>
+                  <button
+                    class="ghost-button small"
+                    :disabled="!updateInfo?.releaseUrl"
+                    @click="openUpdateRelease"
+                  >
+                    <AppIcon name="external" :size="14" />
+                    Release
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="updateError" class="update-error" role="alert">
+                {{ updateError }}
+              </div>
+
+              <div v-if="updateInfo?.available" class="update-release">
+                <div class="update-release-head">
+                  <div>
+                    <span class="eyebrow">LATEST RELEASE</span>
+                    <h3>{{ updateInfo.releaseName || releaseVersion(updateInfo.latestVersion) }}</h3>
+                  </div>
+                  <span v-if="updateInfo.publishedAt">
+                    发布于 {{ formatReleaseDate(updateInfo.publishedAt) }}
+                  </span>
+                </div>
+                <pre v-if="updateInfo.releaseNotes" class="update-release-notes">{{ updateInfo.releaseNotes }}</pre>
+                <p v-else class="update-release-empty">该 Release 未提供更新说明。</p>
+
+                <div class="update-download-row">
+                  <div>
+                    <strong>{{ updateInfo.assetName || "当前平台暂无匹配安装包" }}</strong>
+                    <small v-if="updateInfo.assetName">
+                      {{ formatBytes(updateInfo.assetSize) }} · 下载至 Downloads/duckdb-report-updates
+                    </small>
+                  </div>
+                  <div class="update-actions">
+                    <button
+                      class="primary-button"
+                      :disabled="!updateInfo.assetName || updateDownloadBusy"
+                      @click="downloadUpdate"
+                    >
+                      <AppIcon name="download" :size="15" />
+                      {{ updateDownloadBusy ? "下载并校验中…" : "下载更新包" }}
+                    </button>
+                    <button
+                      v-if="updateDownloaded"
+                      class="secondary-button"
+                      @click="openDownloadedUpdate"
+                    >
+                      <AppIcon name="external" :size="15" />
+                      打开更新包
+                    </button>
+                  </div>
+                </div>
+                <p v-if="updateDownloaded" class="update-downloaded">
+                  <strong>已校验：</strong>
+                  <code>{{ updateDownloaded.path }}</code>
+                </p>
+              </div>
+            </section>
           </div>
         </section>
 

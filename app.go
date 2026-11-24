@@ -23,6 +23,7 @@ import (
 	"github.com/alexwoo79/duckdb-report/internal/report"
 	"github.com/alexwoo79/duckdb-report/internal/runner"
 	"github.com/alexwoo79/duckdb-report/internal/settings"
+	"github.com/alexwoo79/duckdb-report/internal/update"
 	appversion "github.com/alexwoo79/duckdb-report/internal/version"
 	"github.com/alexwoo79/duckdb-report/internal/workflow"
 	"github.com/alexwoo79/duckdb-report/internal/workflowbundle"
@@ -45,11 +46,15 @@ type App struct {
 	quarto            string
 	seedData          bool
 	initErr           error
+	updater           *update.Checker
+	updates           updateState
 	mu                sync.Mutex
 }
 
 func NewApp(exampleFS fs.FS) *App {
-	app := &App{}
+	app := &App{
+		updater: newUpdateChecker(),
+	}
 	report.EnsureRuntimePath()
 	configDir, err := os.UserConfigDir()
 	if err != nil {
@@ -1177,7 +1182,7 @@ func openWithSystem(path string) error {
 	}
 	output, err := command.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("open report with system application: %w: %s", err, strings.TrimSpace(string(output)))
+		return fmt.Errorf("open with system application: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 	return nil
 }

@@ -554,6 +554,50 @@ export namespace model {
 
 
 
+	export class UpdateDownload {
+	    name: string;
+	    path: string;
+	    size: number;
+
+	    static createFrom(source: any = {}) {
+	        return new UpdateDownload(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.name = source["name"];
+	        this.path = source["path"];
+	        this.size = source["size"];
+	    }
+	}
+	export class UpdateInfo {
+	    currentVersion: string;
+	    latestVersion: string;
+	    available: boolean;
+	    releaseName: string;
+	    releaseUrl: string;
+	    publishedAt: string;
+	    releaseNotes: string;
+	    assetName: string;
+	    assetSize: number;
+
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.available = source["available"];
+	        this.releaseName = source["releaseName"];
+	        this.releaseUrl = source["releaseUrl"];
+	        this.publishedAt = source["publishedAt"];
+	        this.releaseNotes = source["releaseNotes"];
+	        this.assetName = source["assetName"];
+	        this.assetSize = source["assetSize"];
+	    }
+	}
 
 	export class WorkflowRequest {
 	    workflow: Workflow;

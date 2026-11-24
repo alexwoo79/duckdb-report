@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.8 - 2026-11-24
+
+### Added
+
+- Track the latest stable GitHub Release on startup and every six hours, show an update badge on the Settings rail button, and expose release details in Settings.
+- Download the matching macOS, Windows, or Linux package to `Downloads/duckdb-report-updates`, verify it against the published SHA-256 checksum, and open the verified package from Settings.
+
 ## v2.0.7 - 2026-11-23
 
 ### Changed

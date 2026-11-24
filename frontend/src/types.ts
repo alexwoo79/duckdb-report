@@ -97,6 +97,24 @@ export interface SettingsInfo {
   uiFontSize: number;
 }
 
+export interface UpdateInfo {
+  currentVersion: string;
+  latestVersion: string;
+  available: boolean;
+  releaseName: string;
+  releaseUrl: string;
+  publishedAt: string;
+  releaseNotes: string;
+  assetName: string;
+  assetSize: number;
+}
+
+export interface UpdateDownload {
+  name: string;
+  path: string;
+  size: number;
+}
+
 export interface RunInfo {
   id: string;
   name: string;
@@ -219,6 +237,10 @@ export interface Backend {
   OpenOutput(runId: string, format: "html" | "pdf"): Promise<void>;
   SaveOutput(runId: string, format: "html" | "pdf"): Promise<string>;
   SaveSettings(settings: AppSettings): Promise<SettingsInfo>;
+  CheckForUpdates(): Promise<UpdateInfo>;
+  DownloadUpdate(): Promise<UpdateDownload>;
+  OpenUpdateRelease(): Promise<void>;
+  OpenDownloadedUpdate(): Promise<void>;
   ValidateWorkflow(workflow: Workflow): Promise<void>;
 }
 
