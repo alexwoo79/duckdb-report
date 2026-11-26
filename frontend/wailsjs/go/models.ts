@@ -1,14 +1,14 @@
 export namespace model {
-
+	
 	export class AppSettings {
 	    displayName: string;
 	    workspace: string;
 	    uiFontSize: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new AppSettings(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.displayName = source["displayName"];
@@ -25,11 +25,11 @@ export namespace model {
 	    settingsPath: string;
 	    workspaceOverride: boolean;
 	    uiFontSize: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SettingsInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.displayName = source["displayName"];
@@ -52,11 +52,11 @@ export namespace model {
 	    pythonVersion: string;
 	    jupyterAvailable: boolean;
 	    pdfAvailable: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Environment(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.duckdbVersion = source["duckdbVersion"];
@@ -76,11 +76,11 @@ export namespace model {
 	    htmlPath: string;
 	    pdfPath: string;
 	    modifiedAt: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RunInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -95,11 +95,11 @@ export namespace model {
 	    path: string;
 	    table: string;
 	    sheet?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Source(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -113,11 +113,11 @@ export namespace model {
 	    schema: string;
 	    name: string;
 	    type: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new TableRef(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.catalog = source["catalog"];
@@ -132,11 +132,11 @@ export namespace model {
 	    type: string;
 	    readOnly: boolean;
 	    isCurrent: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DatabaseRef(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -149,11 +149,11 @@ export namespace model {
 	export class FileRef {
 	    name: string;
 	    path: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FileRef(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -166,11 +166,11 @@ export namespace model {
 	    name: string;
 	    description: string;
 	    params: Record<string, string>;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Preset(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -187,11 +187,11 @@ export namespace model {
 	    presetId: string;
 	    overrides?: Record<string, string>;
 	    enabled: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Step(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -209,11 +209,11 @@ export namespace model {
 	    runtime: Record<string, string>;
 	    steps: Step[];
 	    presets: Preset[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Workflow(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -223,7 +223,7 @@ export namespace model {
 	        this.steps = this.convertValues(source["steps"], Step);
 	        this.presets = this.convertValues(source["presets"], Preset);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -255,11 +255,11 @@ export namespace model {
 	    runs: RunInfo[];
 	    environment: Environment;
 	    settings: SettingsInfo;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Bootstrap(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.workspace = source["workspace"];
@@ -275,7 +275,7 @@ export namespace model {
 	        this.environment = this.convertValues(source["environment"], Environment);
 	        this.settings = this.convertValues(source["settings"], SettingsInfo);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -297,11 +297,11 @@ export namespace model {
 	export class ColumnRef {
 	    name: string;
 	    type: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ColumnRef(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -312,18 +312,18 @@ export namespace model {
 	    databases: DatabaseRef[];
 	    tables: TableRef[];
 	    sources: Source[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DataCatalog(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.databases = this.convertValues(source["databases"], DatabaseRef);
 	        this.tables = this.convertValues(source["tables"], TableRef);
 	        this.sources = this.convertValues(source["sources"], Source);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -342,33 +342,33 @@ export namespace model {
 		    return a;
 		}
 	}
-
-
+	
+	
 	export class FileContent {
 	    path: string;
 	    content: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FileContent(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
 	        this.content = source["content"];
 	    }
 	}
-
+	
 	export class ImportRequest {
 	    path: string;
 	    kind: string;
 	    table: string;
 	    sheet: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ImportRequest(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -381,18 +381,18 @@ export namespace model {
 	    source: Source;
 	    tables: TableRef[];
 	    log: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new ImportResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.source = this.convertValues(source["source"], Source);
 	        this.tables = this.convertValues(source["tables"], TableRef);
 	        this.log = source["log"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -411,7 +411,7 @@ export namespace model {
 		    return a;
 		}
 	}
-
+	
 	export class QueryResult {
 	    columns: string[];
 	    rows: any[][];
@@ -420,11 +420,11 @@ export namespace model {
 	    elapsedMs: number;
 	    executedSql: string;
 	    rowsAffected: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new QueryResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.columns = source["columns"];
@@ -443,11 +443,11 @@ export namespace model {
 	    params: Record<string, string>;
 	    saveAs: string;
 	    templatePath: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RenderRequest(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.content = source["content"];
@@ -465,11 +465,11 @@ export namespace model {
 	    outputPath: string;
 	    format: string;
 	    log: string[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new RenderResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.runId = source["runId"];
@@ -480,18 +480,18 @@ export namespace model {
 	        this.log = source["log"];
 	    }
 	}
-
+	
 	export class SQLCompletionTable {
 	    catalog: string;
 	    schema: string;
 	    name: string;
 	    type: string;
 	    columns: ColumnRef[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SQLCompletionTable(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.catalog = source["catalog"];
@@ -500,7 +500,7 @@ export namespace model {
 	        this.type = source["type"];
 	        this.columns = this.convertValues(source["columns"], ColumnRef);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -521,16 +521,16 @@ export namespace model {
 	}
 	export class SQLCompletionCatalog {
 	    tables: SQLCompletionTable[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SQLCompletionCatalog(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.tables = this.convertValues(source["tables"], SQLCompletionTable);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -549,20 +549,20 @@ export namespace model {
 		    return a;
 		}
 	}
-
-
-
-
-
+	
+	
+	
+	
+	
 	export class UpdateDownload {
 	    name: string;
 	    path: string;
 	    size: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new UpdateDownload(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -580,11 +580,11 @@ export namespace model {
 	    releaseNotes: string;
 	    assetName: string;
 	    assetSize: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.currentVersion = source["currentVersion"];
@@ -598,21 +598,21 @@ export namespace model {
 	        this.assetSize = source["assetSize"];
 	    }
 	}
-
+	
 	export class WorkflowRequest {
 	    workflow: Workflow;
 	    params: Record<string, string>;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new WorkflowRequest(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.workflow = this.convertValues(source["workflow"], Workflow);
 	        this.params = source["params"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -640,11 +640,11 @@ export namespace model {
 	    log: string[];
 	    startedAt: string;
 	    finishedAt: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new WorkflowResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.runId = source["runId"];
@@ -656,7 +656,7 @@ export namespace model {
 	        this.startedAt = source["startedAt"];
 	        this.finishedAt = source["finishedAt"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;

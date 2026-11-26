@@ -2516,6 +2516,121 @@ onBeforeUnmount(() => {
                 <p>本地 DuckDB + SQL + Quarto 分析工作台。数据与报告默认不会上传到外部服务。</p>
                 <code>duckdb_report {{ state?.settings.version }} · Go + Vue 3 + Wails</code>
               </section>
+
+              <section class="settings-card settings-update-card">
+                <div class="settings-card-head">
+                  <div class="settings-card-icon"><AppIcon name="download" :size="19" /></div>
+                  <div>
+                    <span class="eyebrow">SOFTWARE UPDATE</span>
+                    <h2>软件更新</h2>
+                  </div>
+                  <span
+                    class="update-state-pill"
+                    role="status"
+                    aria-live="polite"
+                    :class="{
+                      available: updateInfo?.available,
+                      current: updateInfo && !updateInfo.available,
+                      error: updateError,
+                    }"
+                  >
+                    {{
+                      updateBusy
+                        ? "检查中"
+                        : updateError
+                          ? "操作失败"
+                          : updateInfo?.available
+                            ? "有新版本"
+                            : updateInfo
+                              ? "已是最新"
+                              : "尚未检查"
+                    }}
+                  </span>
+                </div>
+                <p class="settings-description">
+                  应用会静默跟踪 GitHub Release，并在发现新版时点亮左下角设置按钮的角标。
+                  更新包下载后会自动执行 SHA-256 校验。
+                </p>
+
+                <div class="update-version-row">
+                  <div class="update-version-cell">
+                    <span>当前版本</span>
+                    <strong>{{ releaseVersion(state?.settings.version) }}</strong>
+                  </div>
+                  <AppIcon name="chevron" :size="16" />
+                  <div class="update-version-cell latest">
+                    <span>GitHub 最新正式版</span>
+                    <strong>{{ releaseVersion(updateInfo?.latestVersion) }}</strong>
+                  </div>
+                  <div class="update-actions">
+                    <button
+                      class="ghost-button small"
+                      :disabled="updateBusy"
+                      @click="checkForUpdates()"
+                    >
+                      <AppIcon name="refresh" :size="14" />
+                      {{ updateBusy ? "检查中…" : "检查更新" }}
+                    </button>
+                    <button
+                      class="ghost-button small"
+                      :disabled="!updateInfo?.releaseUrl"
+                      @click="openUpdateRelease"
+                    >
+                      <AppIcon name="external" :size="14" />
+                      Release
+                    </button>
+                  </div>
+                </div>
+
+                <div v-if="updateError" class="update-error" role="alert">
+                  {{ updateError }}
+                </div>
+
+                <div v-if="updateInfo?.available" class="update-release">
+                  <div class="update-release-head">
+                    <div>
+                      <span class="eyebrow">LATEST RELEASE</span>
+                      <h3>{{ updateInfo.releaseName || releaseVersion(updateInfo.latestVersion) }}</h3>
+                    </div>
+                    <span v-if="updateInfo.publishedAt">
+                      发布于 {{ formatReleaseDate(updateInfo.publishedAt) }}
+                    </span>
+                  </div>
+                  <pre v-if="updateInfo.releaseNotes" class="update-release-notes">{{ updateInfo.releaseNotes }}</pre>
+                  <p v-else class="update-release-empty">该 Release 未提供更新说明。</p>
+
+                  <div class="update-download-row">
+                    <div>
+                      <strong>{{ updateInfo.assetName || "当前平台暂无匹配安装包" }}</strong>
+                      <small v-if="updateInfo.assetName">
+                        {{ formatBytes(updateInfo.assetSize) }} · 下载至 Downloads/duckdb-report-updates
+                      </small>
+                    </div>
+                    <div class="update-actions">
+                      <button
+                        class="primary-button"
+                        :disabled="!updateInfo.assetName || updateDownloadBusy"
+                        @click="downloadUpdate"
+                      >
+                        <AppIcon name="download" :size="15" />
+                        {{ updateDownloadBusy ? "下载并校验中…" : "下载更新包" }}
+                      </button>
+                      <button
+                        v-if="updateDownloaded"
+                        class="secondary-button"
+                        @click="openDownloadedUpdate"
+                      >
+                        <AppIcon name="external" :size="15" />
+                        打开更新包
+                      </button>
+                    </div>
+                  </div>
+                  <p v-if="updateDownloaded" class="update-downloaded">
+                    <strong>已校验：</strong>
+                    <code>{{ updateDownloaded.path }}</code>
+                  </p>
+                </div>
+              </section>
             </div>
 
             <div class="settings-column">
@@ -2609,120 +2724,6 @@ onBeforeUnmount(() => {
               </section>
             </div>
 
-            <section class="settings-card settings-update-card">
-              <div class="settings-card-head">
-                <div class="settings-card-icon"><AppIcon name="download" :size="19" /></div>
-                <div>
-                  <span class="eyebrow">SOFTWARE UPDATE</span>
-                  <h2>软件更新</h2>
-                </div>
-                <span
-                  class="update-state-pill"
-                  role="status"
-                  aria-live="polite"
-                  :class="{
-                    available: updateInfo?.available,
-                    current: updateInfo && !updateInfo.available,
-                    error: updateError,
-                  }"
-                >
-                  {{
-                    updateBusy
-                      ? "检查中"
-                      : updateError
-                        ? "操作失败"
-                        : updateInfo?.available
-                          ? "有新版本"
-                          : updateInfo
-                            ? "已是最新"
-                            : "尚未检查"
-                  }}
-                </span>
-              </div>
-              <p class="settings-description">
-                应用会静默跟踪 GitHub Release，并在发现新版时点亮左下角设置按钮的角标。
-                更新包下载后会自动执行 SHA-256 校验。
-              </p>
-
-              <div class="update-version-row">
-                <div class="update-version-cell">
-                  <span>当前版本</span>
-                  <strong>{{ releaseVersion(state?.settings.version) }}</strong>
-                </div>
-                <AppIcon name="chevron" :size="16" />
-                <div class="update-version-cell latest">
-                  <span>GitHub 最新正式版</span>
-                  <strong>{{ releaseVersion(updateInfo?.latestVersion) }}</strong>
-                </div>
-                <div class="update-actions">
-                  <button
-                    class="ghost-button small"
-                    :disabled="updateBusy"
-                    @click="checkForUpdates()"
-                  >
-                    <AppIcon name="refresh" :size="14" />
-                    {{ updateBusy ? "检查中…" : "检查更新" }}
-                  </button>
-                  <button
-                    class="ghost-button small"
-                    :disabled="!updateInfo?.releaseUrl"
-                    @click="openUpdateRelease"
-                  >
-                    <AppIcon name="external" :size="14" />
-                    Release
-                  </button>
-                </div>
-              </div>
-
-              <div v-if="updateError" class="update-error" role="alert">
-                {{ updateError }}
-              </div>
-
-              <div v-if="updateInfo?.available" class="update-release">
-                <div class="update-release-head">
-                  <div>
-                    <span class="eyebrow">LATEST RELEASE</span>
-                    <h3>{{ updateInfo.releaseName || releaseVersion(updateInfo.latestVersion) }}</h3>
-                  </div>
-                  <span v-if="updateInfo.publishedAt">
-                    发布于 {{ formatReleaseDate(updateInfo.publishedAt) }}
-                  </span>
-                </div>
-                <pre v-if="updateInfo.releaseNotes" class="update-release-notes">{{ updateInfo.releaseNotes }}</pre>
-                <p v-else class="update-release-empty">该 Release 未提供更新说明。</p>
-
-                <div class="update-download-row">
-                  <div>
-                    <strong>{{ updateInfo.assetName || "当前平台暂无匹配安装包" }}</strong>
-                    <small v-if="updateInfo.assetName">
-                      {{ formatBytes(updateInfo.assetSize) }} · 下载至 Downloads/duckdb-report-updates
-                    </small>
-                  </div>
-                  <div class="update-actions">
-                    <button
-                      class="primary-button"
-                      :disabled="!updateInfo.assetName || updateDownloadBusy"
-                      @click="downloadUpdate"
-                    >
-                      <AppIcon name="download" :size="15" />
-                      {{ updateDownloadBusy ? "下载并校验中…" : "下载更新包" }}
-                    </button>
-                    <button
-                      v-if="updateDownloaded"
-                      class="secondary-button"
-                      @click="openDownloadedUpdate"
-                    >
-                      <AppIcon name="external" :size="15" />
-                      打开更新包
-                    </button>
-                  </div>
-                </div>
-                <p v-if="updateDownloaded" class="update-downloaded">
-                  <strong>已校验：</strong>
-                  <code>{{ updateDownloaded.path }}</code>
-                </p>
-              </div>
-            </section>
           </div>
         </section>
 
