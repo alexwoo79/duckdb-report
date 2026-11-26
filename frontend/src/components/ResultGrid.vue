@@ -7,6 +7,11 @@ import AppIcon from "./AppIcon.vue";
 const props = defineProps<{
   result: QueryResult | null;
   emptyText?: string;
+  editable?: boolean;
+}>();
+
+const emit = defineEmits<{
+  "edit-row": [row: unknown[], originalIndex: number];
 }>();
 
 const page = ref(1);
@@ -189,6 +194,7 @@ async function exportResult(format: "csv" | "parquet") {
           <table class="result-table">
             <thead>
               <tr>
+                <th v-if="editable" class="row-action" aria-label="行操作"></th>
                 <th class="row-index">#</th>
                 <th
                   v-for="(column, columnIndex) in result.columns"
@@ -206,6 +212,17 @@ async function exportResult(format: "csv" | "parquet") {
             </thead>
             <tbody>
               <tr v-for="{ row, originalIndex } in visibleRows" :key="originalIndex">
+                <td v-if="editable" class="row-action">
+                  <button
+                    type="button"
+                    class="row-edit-button"
+                    title="更新此行"
+                    aria-label="更新此行"
+                    @click="emit('edit-row', row, originalIndex)"
+                  >
+                    <AppIcon name="edit" :size="13" />
+                  </button>
+                </td>
                 <td class="row-index">{{ originalIndex + 1 }}</td>
                 <td
                   v-for="(value, columnIndex) in row"
@@ -216,7 +233,7 @@ async function exportResult(format: "csv" | "parquet") {
                 </td>
               </tr>
               <tr v-if="visibleRows.length === 0">
-                <td :colspan="result.columns.length + 1" class="table-empty">
+                <td :colspan="result.columns.length + 1 + (editable ? 1 : 0)" class="table-empty">
                   {{ searchQuery.trim() ? "没有匹配搜索条件的数据。" : "查询执行成功，没有返回记录。" }}
                 </td>
               </tr>

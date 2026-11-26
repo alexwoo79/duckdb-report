@@ -21,13 +21,10 @@ import {
 } from "@codemirror/commands";
 import {
   bracketMatching,
-  HighlightStyle,
   indentOnInput,
   syntaxHighlighting,
 } from "@codemirror/language";
 import {
-  PostgreSQL,
-  SQLDialect,
   keywordCompletionSource,
   schemaCompletionSource,
   sql,
@@ -47,9 +44,11 @@ import {
   lineNumbers,
   rectangularSelection,
 } from "@codemirror/view";
-import { tags } from "@lezer/highlight";
 import { useEditorFontSize } from "../editorPreferences";
+import { formatDuckDBSQL } from "../sqlFormatter";
+import { duckDBDialect, sqlHighlightStyle } from "../sqlLanguage";
 import type { SQLCompletionTable } from "../types";
+import AppIcon from "./AppIcon.vue";
 
 const props = defineProps<{
   modelValue: string;
@@ -70,7 +69,15 @@ const host = ref<HTMLDivElement | null>(null);
 const line = ref(1);
 const column = ref(1);
 const selectedCharacters = ref(0);
-const modifierLabel = /Mac|iPhone|iPad/.test(navigator.platform) ? "⌘" : "Ctrl";
+const formatFeedback = ref<{
+  kind: "success" | "error";
+  message: string;
+} | null>(null);
+const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+const modifierLabel = isMac ? "⌘" : "Ctrl";
+const formatShortcutLabel = isMac
+  ? `${modifierLabel}+Shift+F / ${modifierLabel}+Alt+L`
+  : `${modifierLabel}+Shift+F`;
 const {
   editorFontSize,
   increaseEditorFontSize,
@@ -82,25 +89,9 @@ const completionCompartment = new Compartment();
 let editor: EditorView | null = null;
 let syncingFromProps = false;
 let modelSyncTimer: number | undefined;
+let formatFeedbackTimer: number | undefined;
 
 const MODEL_SYNC_DELAY_MS = 160;
-
-const duckDBDialect = SQLDialect.define({
-  ...PostgreSQL.spec,
-  keywords: `${PostgreSQL.spec.keywords ?? ""}
-    ATTACH DETACH INSTALL LOAD PIVOT UNPIVOT QUALIFY SAMPLE SUMMARIZE
-    DESCRIBE EXPORT COPY MACRO COLUMNS EXCLUDE REPLACE RENAME STAR`,
-  builtin: `${PostgreSQL.spec.builtin ?? ""}
-    list_filter list_transform list_aggregate list_value list_sort unnest
-    generate_series range read_csv_auto read_parquet read_json_auto glob
-    regexp_matches string_agg arg_max arg_min quantile_cont median
-    approx_count_distinct struct_pack map_from_entries json_extract json_value
-    epoch_ms strftime date_trunc`,
-  types: `${PostgreSQL.spec.types ?? ""}
-    HUGEINT UHUGEINT UBIGINT UTINYINT USMALLINT UINTEGER BIGNUM VARINT
-    MAP STRUCT UNION LIST ARRAY ENUM UUID JSON`,
-  caseInsensitiveIdentifiers: true,
-});
 
 const tableSection = { name: "表与视图", rank: 1 };
 const columnSection = { name: "字段", rank: 2 };
@@ -228,32 +219,6 @@ function completionExtension(tables: SQLCompletionTable[]) {
   });
 }
 
-const sqlHighlightStyle = HighlightStyle.define([
-  { tag: tags.keyword, color: "var(--orange)", fontWeight: "600" },
-  {
-    tag: [tags.string, tags.special(tags.string), tags.regexp],
-    color: "var(--teal)",
-  },
-  {
-    tag: [tags.number, tags.bool, tags.null, tags.atom],
-    color: "var(--blue)",
-  },
-  {
-    tag: [tags.function(tags.variableName), tags.function(tags.propertyName)],
-    color: "var(--blue)",
-  },
-  { tag: [tags.typeName, tags.className], color: "var(--teal)" },
-  { tag: tags.operator, color: "var(--muted)" },
-  {
-    tag: [tags.comment, tags.lineComment, tags.blockComment],
-    color: "var(--subtle)",
-    fontStyle: "italic",
-  },
-  { tag: [tags.variableName, tags.propertyName], color: "var(--text)" },
-  { tag: [tags.bracket, tags.punctuation], color: "var(--muted)" },
-  { tag: tags.invalid, color: "var(--red)" },
-]);
-
 function selectedSQL(view: EditorView): string {
   const document = view.state.doc.toString();
   return view.state.selection.ranges
@@ -269,6 +234,58 @@ function flushModelSync(view: EditorView | null = editor) {
     modelSyncTimer = undefined;
   }
   if (view) emit("update:modelValue", view.state.doc.toString());
+}
+
+function showFormatFeedback(kind: "success" | "error", message: string) {
+  if (formatFeedbackTimer !== undefined) {
+    window.clearTimeout(formatFeedbackTimer);
+  }
+  formatFeedback.value = { kind, message };
+  formatFeedbackTimer = window.setTimeout(() => {
+    formatFeedback.value = null;
+    formatFeedbackTimer = undefined;
+  }, kind === "error" ? 5000 : 1800);
+}
+
+function formatSQLInEditor(view: EditorView): boolean {
+  const state = view.state;
+  const ranges = state.selection.ranges.filter((range) => !range.empty);
+  const hasSingleSelection =
+    ranges.length === 1 && state.selection.ranges.length === 1;
+  const from = hasSingleSelection ? ranges[0].from : 0;
+  const to = hasSingleSelection ? ranges[0].to : state.doc.length;
+  const source = state.sliceDoc(from, to);
+  if (!source.trim()) return false;
+
+  try {
+    const formatted = formatDuckDBSQL(source);
+    if (formatted === source) {
+      showFormatFeedback("success", hasSingleSelection ? "所选 SQL 已格式化" : "SQL 已格式化");
+      return true;
+    }
+    const preserveSelection = hasSingleSelection;
+    view.dispatch({
+      changes: { from, to, insert: formatted },
+      selection: preserveSelection
+        ? { anchor: from, head: from + formatted.length }
+        : { anchor: Math.min(state.selection.main.head, formatted.length) },
+      scrollIntoView: true,
+    });
+    showFormatFeedback(
+      "success",
+      preserveSelection ? "已格式化所选 SQL" : "已格式化全部 SQL",
+    );
+    view.focus();
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    showFormatFeedback("error", `格式化失败：${message}`);
+    return false;
+  }
+}
+
+function formatFromToolbar() {
+  if (editor) formatSQLInEditor(editor);
 }
 
 function scheduleModelSync(view: EditorView) {
@@ -357,6 +374,20 @@ const customKeymap = [
     preventDefault: true,
     run: startCompletion,
   },
+  {
+    key: "Mod-Shift-f",
+    preventDefault: true,
+    run: formatSQLInEditor,
+  },
+  ...(isMac
+    ? [
+        {
+          key: "Mod-Alt-l",
+          preventDefault: true,
+          run: formatSQLInEditor,
+        },
+      ]
+    : []),
 ];
 
 function updateCursorState(state: EditorState) {
@@ -443,6 +474,9 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   flushModelSync();
+  if (formatFeedbackTimer !== undefined) {
+    window.clearTimeout(formatFeedbackTimer);
+  }
   editor?.destroy();
   editor = null;
 });
@@ -474,6 +508,23 @@ defineExpose({
       <span>Ln {{ line }}, Col {{ column }}</span>
       <span v-if="selectedCharacters > 0">已选 {{ selectedCharacters }} 字符</span>
       <span>{{ busy ? "查询执行中…" : "Enter 换行" }}</span>
+      <span
+        v-if="formatFeedback"
+        class="sql-format-feedback"
+        :class="formatFeedback.kind"
+      >
+        {{ formatFeedback.message }}
+      </span>
+      <button
+        type="button"
+        class="sql-format-button"
+        :title="`格式化 SQL (${formatShortcutLabel})`"
+        @click="formatFromToolbar"
+      >
+        <AppIcon name="format" :size="12" />
+        <span>格式化</span>
+        <kbd>{{ modifierLabel }}+Shift+F</kbd>
+      </button>
       <span class="editor-font-size-control">
         <button type="button" title="减小编辑器字号" @click="decreaseEditorFontSize">
           −
@@ -485,7 +536,7 @@ defineExpose({
       </span>
       <span class="sql-editor-shortcuts">
         {{ modifierLabel }}+Enter 运行 · {{ modifierLabel }}+S 保存 ·
-        Tab 接受补全 · {{ modifierLabel }}-/+ 字号
+        {{ modifierLabel }}+Shift+F 格式化 · Tab 接受补全
       </span>
     </div>
   </div>

@@ -146,6 +146,99 @@ func TestLoadDataCatalog(t *testing.T) {
 	}
 }
 
+func TestWriteTableRow(t *testing.T) {
+	t.Parallel()
+	app := newWorkspaceSwitchTestApp(t, t.TempDir())
+	if _, err := app.database.Query(t.Context(), `
+		CREATE TABLE form_contacts(
+			id BIGINT,
+			name VARCHAR,
+			active BOOLEAN DEFAULT true
+		);
+	`, 1); err != nil {
+		t.Fatal(err)
+	}
+	catalog, err := app.LoadSQLCompletions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var table *model.SQLCompletionTable
+	for i := range catalog.Tables {
+		if catalog.Tables[i].Name == "form_contacts" {
+			table = &catalog.Tables[i]
+			break
+		}
+	}
+	if table == nil {
+		t.Fatalf("form_contacts table not found: %#v", catalog.Tables)
+	}
+	editor, err := app.LoadTableEditorInfo(model.TableRef{
+		Catalog: table.Catalog,
+		Schema:  table.Schema,
+		Name:    table.Name,
+		Type:    table.Type,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !editor.Writable ||
+		editor.KeyType != "" ||
+		len(editor.Columns) != 3 {
+		t.Fatalf("table editor info = %#v", editor)
+	}
+	preview, err := app.PreviewTableStructure(model.TableStructureRequest{
+		Operation:  model.TableStructureAddColumn,
+		Table:      editor.Table,
+		Column:     "note",
+		ColumnType: "VARCHAR",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.SQL == "" {
+		t.Fatal("structure preview SQL is empty")
+	}
+	if _, err := app.AlterTableStructure(model.TableStructureRequest{
+		Operation:  model.TableStructureAddColumn,
+		Table:      editor.Table,
+		Column:     "note",
+		ColumnType: "VARCHAR",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := app.WriteTableRow(model.TableWriteRequest{
+		Operation: model.TableWriteInsert,
+		Table: model.TableRef{
+			Catalog: table.Catalog,
+			Schema:  table.Schema,
+			Name:    table.Name,
+			Type:    table.Type,
+		},
+		Values: []model.TableValue{
+			{Column: "id", Value: "7"},
+			{Column: "name", Value: "Ada"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.RowsAffected != 1 {
+		t.Fatalf("RowsAffected = %d, want 1", result.RowsAffected)
+	}
+	query, err := app.RunSQL(
+		`SELECT id, name, active FROM form_contacts`,
+		10,
+		"",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if query.RowCount != 1 || fmt.Sprint(query.Rows[0][2]) != "true" {
+		t.Fatalf("written row = %#v", query.Rows)
+	}
+}
+
 func TestSaveSettingsSwitchesWorkspace(t *testing.T) {
 	t.Parallel()
 	oldRoot := t.TempDir()

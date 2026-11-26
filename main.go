@@ -54,6 +54,7 @@ func runDesktop() {
 		Height:           940,
 		MinWidth:         1120,
 		MinHeight:        720,
+		WindowStartState: options.Maximised,
 		BackgroundColour: options.NewRGB(17, 20, 24),
 		AssetServer:      assetOptions,
 		OnStartup:        app.startup,

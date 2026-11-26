@@ -83,6 +83,25 @@ textarea {
   font: inherit;
 }
 
+select {
+  color-scheme: light;
+}
+
+html[data-theme="dark"] select {
+  color-scheme: dark;
+}
+
+select option,
+select optgroup {
+  color: var(--text);
+  background-color: var(--panel);
+}
+
+select option:disabled {
+  color: var(--subtle);
+  background-color: var(--panel-2);
+}
+
 button {
   color: inherit;
 }
@@ -1805,17 +1824,82 @@ p {
 }
 
 .sql-editor-shortcuts {
+  min-width: 0;
+  flex: 1;
+  margin-left: 8px;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sql-format-button {
+  height: 19px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   margin-left: auto;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--muted);
+  background: var(--panel);
+  font: calc(8px * var(--ui-font-scale)) system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.sql-format-button:hover,
+.sql-format-button:focus-visible {
+  color: var(--orange);
+  border-color: color-mix(in srgb, var(--orange) 36%, var(--border));
+  background: var(--orange-soft);
+}
+
+.sql-format-button kbd {
+  padding: 0 3px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--subtle);
+  background: var(--panel-2);
+  font: calc(7px * var(--ui-font-scale)) var(--mono);
+}
+
+.sql-format-feedback {
+  max-width: min(330px, 28vw);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.sql-format-feedback.success {
+  color: var(--teal);
+}
+
+.sql-format-feedback.error {
+  color: var(--red);
+}
+
+@media (max-width: 980px) {
+  .sql-editor-shortcuts {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  .sql-format-button kbd {
+    display: none;
+  }
+
+  .sql-format-feedback {
+    max-width: 180px;
+  }
 }
 
 .editor-font-size-control {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  margin-left: auto;
+  margin-left: 0;
   color: var(--muted);
   font-family: var(--mono);
 }
@@ -2163,6 +2247,33 @@ p {
 
 .result-table tbody tr:hover {
   background: color-mix(in srgb, var(--blue-soft) 60%, transparent);
+}
+
+.result-table .row-action {
+  width: 34px;
+  padding: 2px !important;
+  text-align: center;
+}
+
+.row-edit-button {
+  width: 25px;
+  height: 25px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--subtle);
+  background: transparent;
+  cursor: pointer;
+}
+
+.row-edit-button:hover,
+.row-edit-button:focus-visible {
+  color: var(--orange);
+  border-color: color-mix(in srgb, var(--orange) 35%, var(--border));
+  background: var(--orange-soft);
 }
 
 .result-table .row-index {

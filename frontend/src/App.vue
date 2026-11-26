@@ -31,6 +31,8 @@ import type {
   SQLCompletionTable,
   StepEvent,
   TableRef,
+  TableStructureResult,
+  TableWriteResult,
   UpdateDownload,
   UpdateInfo,
   ViewName,
@@ -41,6 +43,9 @@ import appIcon from "./assets/images/app-icon.svg";
 
 const SqlEditor = defineAsyncComponent(() => import("./components/SqlEditor.vue"));
 const QmdEditor = defineAsyncComponent(() => import("./components/QmdEditor.vue"));
+const TableEditorPage = defineAsyncComponent(
+  () => import("./components/TableEditorPage.vue"),
+);
 
 interface LogEntry {
   time: string;
@@ -59,6 +64,7 @@ const fatalError = ref("");
 const state = ref<Bootstrap | null>(null);
 const workflow = ref<Workflow | null>(null);
 const activeView = ref<ViewName>("sql");
+const activeTable = ref<TableRef | null>(null);
 const inspectorOpen = ref(true);
 const logsOpen = ref(true);
 const settingsBusy = ref(false);
@@ -499,6 +505,9 @@ const brandPrimary = computed(
 const activeDocumentLabel = computed(() => {
   if (activeView.value === "report") return selectedTemplate.value || "临时报告";
   if (activeView.value === "sql") return selectedSQL.value || "临时 SQL";
+  if (activeView.value === "data" && activeTable.value) {
+    return `${activeTable.value.catalog}.${activeTable.value.schema}.${activeTable.value.name}`;
+  }
   return "工作区";
 });
 const qmdUsesR = computed(() => /```\s*\{\s*r\b/i.test(reportContent.value));
@@ -1257,6 +1266,32 @@ async function previewTable(table: TableRef) {
   await runSQL(false, sqlContent.value);
 }
 
+function openTableEditor(table: TableRef) {
+  activeTable.value = table;
+  activeView.value = "data";
+}
+
+function handleTableEditorSaved(result: TableWriteResult) {
+  const action = result.operation === "insert" ? "新增" : "更新";
+  pushLog(
+    "success",
+    `${action}表数据完成 · ${result.table.name} · ${result.rowsAffected} 行`,
+  );
+  notify(`${action}成功，受影响 ${result.rowsAffected} 行`, "success");
+}
+
+async function handleTableEditorSchemaChanged(result: TableStructureResult) {
+  activeTable.value = result.table;
+  notify("表结构已更新", "success");
+  pushLog("success", `表结构已更新 · ${result.table.name} · ${result.operation}`);
+  try {
+    await refreshDataCatalog();
+    await loadSQLCompletions();
+  } catch (error) {
+    notify(errorMessage(error), "error");
+  }
+}
+
 async function loadSQL(path: string) {
   if (!path) {
     startNewSQL();
@@ -1723,7 +1758,15 @@ onBeforeUnmount(() => {
       <div class="titlebar-breadcrumb">
         <span>{{ activeDocumentLabel }}</span>
         <AppIcon name="chevron" :size="13" />
-        <strong>{{ activeView === "sql" ? "SQL 分析" : activeView === "settings" ? "设置" : "报告生成" }}</strong>
+        <strong>{{
+          activeView === "data"
+            ? "表编辑"
+            : activeView === "sql"
+              ? "SQL 分析"
+              : activeView === "settings"
+                ? "设置"
+                : "报告生成"
+        }}</strong>
       </div>
       <div class="titlebar-actions">
         <div class="runtime-pill" :class="{ ready: state?.environment.quartoPath }">
@@ -1773,6 +1816,7 @@ onBeforeUnmount(() => {
       <nav class="activity-rail">
         <button
           v-for="item in [
+            { id: 'data', icon: 'table', label: '数据' },
             { id: 'sql', icon: 'terminal', label: 'SQL' },
             { id: 'report', icon: 'report', label: '报告' },
           ]"
@@ -1888,7 +1932,7 @@ onBeforeUnmount(() => {
               </button>
             </div>
           </div>
-          <p class="side-help">按 database → schema → table/view 浏览；外部 DuckDB 作为 attached catalog 展示。</p>
+          <p class="side-help">按 database → schema → table/view 浏览；单击表进入表编辑器。</p>
           <label class="search-field">
             <AppIcon name="search" :size="14" />
             <input v-model="sqlFilter" type="search" placeholder="筛选数据库、schema 或表" />
@@ -1992,7 +2036,7 @@ onBeforeUnmount(() => {
                       type="button"
                       class="tree-row table-row"
                       :title="`${table.catalog}.${table.schema}.${table.name}`"
-                      @click="previewTable(table)"
+                      @click="openTableEditor(table)"
                     >
                       <AppIcon name="table" :size="14" />
                       <span class="tree-node-name">{{ table.name }}</span>
@@ -2057,7 +2101,17 @@ onBeforeUnmount(() => {
       ></div>
 
       <main class="main-workspace">
-        <section v-if="activeView === 'workflow'" class="view-panel">
+        <TableEditorPage
+          v-if="activeView === 'data'"
+          :tables="sqlCompletionTables"
+          :databases="state?.databases ?? []"
+          :active-table="activeTable"
+          @saved="handleTableEditorSaved"
+          @schema-changed="handleTableEditorSchemaChanged"
+          @select-table="activeTable = $event"
+        />
+
+        <section v-else-if="activeView === 'workflow'" class="view-panel">
           <div class="page-head">
             <div>
               <span class="eyebrow">COMPOSABLE PIPELINE</span>

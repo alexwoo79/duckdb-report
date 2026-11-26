@@ -1,6 +1,6 @@
 export type PresetType = "datasource" | "sqlset" | "report" | "output";
 export type StepKind = "import" | "sql" | "render" | "export";
-export type ViewName = "workflow" | "sql" | "report" | "settings";
+export type ViewName = "workflow" | "data" | "sql" | "report" | "settings";
 
 export interface Preset {
   id: string;
@@ -51,6 +51,8 @@ export interface DatabaseRef {
 export interface ColumnRef {
   name: string;
   type: string;
+  nullable: boolean;
+  defaultValue: string;
 }
 
 export interface SQLCompletionTable extends TableRef {
@@ -148,6 +150,109 @@ export interface QueryResult {
   rowsAffected: number;
 }
 
+export type TableWriteOperation = "insert" | "update";
+
+export interface TableValue {
+  column: string;
+  value: string;
+  null: boolean;
+}
+
+export interface TableFilter {
+  column: string;
+  operator:
+    | "eq"
+    | "ne"
+    | "lt"
+    | "lte"
+    | "gt"
+    | "gte"
+    | "like"
+    | "ilike"
+    | "is_null"
+    | "is_not_null";
+  value: string;
+}
+
+export interface TableWriteRequest {
+  operation: TableWriteOperation;
+  table: TableRef;
+  values: TableValue[];
+  filters: TableFilter[];
+}
+
+export interface TableWriteResult {
+  table: TableRef;
+  operation: TableWriteOperation;
+  rowsAffected: number;
+  sql: string;
+}
+
+export type TableRelationDirection = "incoming" | "outgoing";
+
+export interface TableRelation {
+  name: string;
+  direction: TableRelationDirection;
+  source: TableRef;
+  sourceColumns: string[];
+  target: TableRef;
+  targetColumns: string[];
+}
+
+export interface TableKey {
+  name: string;
+  type: "PRIMARY KEY" | "UNIQUE";
+  columns: string[];
+}
+
+export interface TableEditorInfo {
+  table: TableRef;
+  columns: ColumnRef[];
+  keys: TableKey[];
+  keyColumns: string[];
+  keyType: string;
+  writable: boolean;
+  estimatedRows: number;
+  columnCount: number;
+  indexCount: number;
+  comment: string;
+  sql: string;
+  relations: TableRelation[];
+}
+
+export type TableStructureOperation =
+  | "rename_table"
+  | "add_column"
+  | "rename_column"
+  | "alter_column_type"
+  | "drop_column"
+  | "set_not_null"
+  | "drop_not_null"
+  | "drop_default"
+  | "add_primary_key"
+  | "add_unique_key";
+
+export interface TableStructureRequest {
+  operation: TableStructureOperation;
+  table: TableRef;
+  column: string;
+  columns: string[];
+  newName: string;
+  columnType: string;
+}
+
+export interface TableStructurePreview {
+  operation: TableStructureOperation;
+  sql: string;
+  warnings: string[];
+}
+
+export interface TableStructureResult {
+  table: TableRef;
+  operation: TableStructureOperation;
+  sql: string;
+}
+
 export interface StepEvent {
   runId: string;
   stepId: string;
@@ -213,6 +318,14 @@ export interface Backend {
   DeleteSource(source: DataSource): Promise<DataCatalog>;
   ResetUserData(): Promise<DataCatalog>;
   RunSQL(query: string, limit: number, basePath: string): Promise<QueryResult>;
+  WriteTableRow(request: TableWriteRequest): Promise<TableWriteResult>;
+  LoadTableEditorInfo(table: TableRef): Promise<TableEditorInfo>;
+  PreviewTableStructure(
+    request: TableStructureRequest,
+  ): Promise<TableStructurePreview>;
+  AlterTableStructure(
+    request: TableStructureRequest,
+  ): Promise<TableStructureResult>;
   ReadText(path: string): Promise<FileContent>;
   SaveText(path: string, content: string): Promise<FileContent>;
   SaveSQLAs(content: string): Promise<FileContent>;

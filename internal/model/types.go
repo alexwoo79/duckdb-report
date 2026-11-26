@@ -66,8 +66,10 @@ type DatabaseRef struct {
 }
 
 type ColumnRef struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
+	Name         string `json:"name"`
+	Type         string `json:"type"`
+	Nullable     bool   `json:"nullable"`
+	DefaultValue string `json:"defaultValue"`
 }
 
 type SQLCompletionTable struct {
@@ -152,6 +154,101 @@ type QueryResult struct {
 	ElapsedMS    int64    `json:"elapsedMs"`
 	ExecutedSQL  string   `json:"executedSql"`
 	RowsAffected int64    `json:"rowsAffected"`
+}
+
+const (
+	TableWriteInsert = "insert"
+	TableWriteUpdate = "update"
+)
+
+type TableValue struct {
+	Column string `json:"column"`
+	Value  string `json:"value"`
+	Null   bool   `json:"null"`
+}
+
+type TableFilter struct {
+	Column   string `json:"column"`
+	Operator string `json:"operator"`
+	Value    string `json:"value"`
+}
+
+type TableWriteRequest struct {
+	Operation string        `json:"operation"`
+	Table     TableRef      `json:"table"`
+	Values    []TableValue  `json:"values"`
+	Filters   []TableFilter `json:"filters"`
+}
+
+type TableWriteResult struct {
+	Table        TableRef `json:"table"`
+	Operation    string   `json:"operation"`
+	RowsAffected int64    `json:"rowsAffected"`
+	SQL          string   `json:"sql"`
+}
+
+type TableRelation struct {
+	Name          string   `json:"name"`
+	Direction     string   `json:"direction"`
+	Source        TableRef `json:"source"`
+	SourceColumns []string `json:"sourceColumns"`
+	Target        TableRef `json:"target"`
+	TargetColumns []string `json:"targetColumns"`
+}
+
+type TableKey struct {
+	Name    string   `json:"name"`
+	Type    string   `json:"type"`
+	Columns []string `json:"columns"`
+}
+
+type TableEditorInfo struct {
+	Table         TableRef        `json:"table"`
+	Columns       []ColumnRef     `json:"columns"`
+	Keys          []TableKey      `json:"keys"`
+	KeyColumns    []string        `json:"keyColumns"`
+	KeyType       string          `json:"keyType"`
+	Writable      bool            `json:"writable"`
+	EstimatedRows int64           `json:"estimatedRows"`
+	ColumnCount   int64           `json:"columnCount"`
+	IndexCount    int64           `json:"indexCount"`
+	Comment       string          `json:"comment"`
+	SQL           string          `json:"sql"`
+	Relations     []TableRelation `json:"relations"`
+}
+
+const (
+	TableStructureRenameTable   = "rename_table"
+	TableStructureAddColumn     = "add_column"
+	TableStructureRenameColumn  = "rename_column"
+	TableStructureAlterType     = "alter_column_type"
+	TableStructureDropColumn    = "drop_column"
+	TableStructureSetNotNull    = "set_not_null"
+	TableStructureDropNotNull   = "drop_not_null"
+	TableStructureDropDefault   = "drop_default"
+	TableStructureAddPrimaryKey = "add_primary_key"
+	TableStructureAddUniqueKey  = "add_unique_key"
+)
+
+type TableStructureRequest struct {
+	Operation  string   `json:"operation"`
+	Table      TableRef `json:"table"`
+	Column     string   `json:"column"`
+	Columns    []string `json:"columns"`
+	NewName    string   `json:"newName"`
+	ColumnType string   `json:"columnType"`
+}
+
+type TableStructurePreview struct {
+	Operation string   `json:"operation"`
+	SQL       string   `json:"sql"`
+	Warnings  []string `json:"warnings"`
+}
+
+type TableStructureResult struct {
+	Table     TableRef `json:"table"`
+	Operation string   `json:"operation"`
+	SQL       string   `json:"sql"`
 }
 
 type ImportRequest struct {

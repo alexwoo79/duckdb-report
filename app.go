@@ -525,6 +525,58 @@ func (a *App) RunSQL(query string, limit int, basePath string) (model.QueryResul
 	return a.database.Query(ctx, expanded, limit)
 }
 
+func (a *App) WriteTableRow(
+	request model.TableWriteRequest,
+) (model.TableWriteResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.initErr != nil {
+		return model.TableWriteResult{}, a.initErr
+	}
+	ctx, cancel := context.WithTimeout(a.operationContext(), 30*time.Second)
+	defer cancel()
+	return a.database.WriteTableRow(ctx, request)
+}
+
+func (a *App) LoadTableEditorInfo(
+	table model.TableRef,
+) (model.TableEditorInfo, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.initErr != nil {
+		return model.TableEditorInfo{}, a.initErr
+	}
+	ctx, cancel := context.WithTimeout(a.operationContext(), 30*time.Second)
+	defer cancel()
+	return a.database.LoadTableEditorInfo(ctx, table)
+}
+
+func (a *App) PreviewTableStructure(
+	request model.TableStructureRequest,
+) (model.TableStructurePreview, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.initErr != nil {
+		return model.TableStructurePreview{}, a.initErr
+	}
+	ctx, cancel := context.WithTimeout(a.operationContext(), 30*time.Second)
+	defer cancel()
+	return a.database.PreviewTableStructure(ctx, request)
+}
+
+func (a *App) AlterTableStructure(
+	request model.TableStructureRequest,
+) (model.TableStructureResult, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.initErr != nil {
+		return model.TableStructureResult{}, a.initErr
+	}
+	ctx, cancel := context.WithTimeout(a.operationContext(), 3*time.Minute)
+	defer cancel()
+	return a.database.AlterTableStructure(ctx, request)
+}
+
 func (a *App) ReadText(path string) (model.FileContent, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
