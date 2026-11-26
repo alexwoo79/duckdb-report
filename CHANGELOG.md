@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.1.0 - 2026-11-26
+
+### Added
+
+- Add a dedicated table editor with table properties, data browsing, row insertion and update, schema relationships, and an ER diagram.
+- Add guarded table structure editing for adding and renaming columns, changing column types and nullability, managing defaults and keys, and renaming tables, with DDL preview and confirmation.
+- Add DuckDB SQL formatting to the editor, plus formatted read-only previews for DDL, parameterized writes, and schema changes.
+
+### Changed
+
+- Open database tables directly in the table editor and remove the duplicate write-table entry from the SQL analysis page.
+- Start the desktop window maximized so high-resolution and 5K displays use the full work area on launch.
+
+### Fixed
+
+- Keep native select menus aligned with the active light or dark theme.
+
 ## v2.0.9 - 2026-11-24
 
 ### Changed
