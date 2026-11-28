@@ -1,0 +1,280 @@
+---
+title: "交互式数据表"
+subtitle: "支持搜索、逐列过滤、列选择、排序、分页、筛选后汇总及导出"
+params:
+  data_file: "/Users/alex/Documents/qmd-report/duckdb1123/contract_commit.csv"
+  max_rows: 0
+format:
+  html:
+    theme: cosmo
+    page-layout: full
+    toc: false
+    embed-resources: true
+    css: assets/table-layout.css
+    include-after-body: assets/table-resize.html
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r}
+#| label: prepare-data
+#| include: false
+
+if (!requireNamespace("DT2", quietly = TRUE)) {
+  stop("缺少 R 包 DT2。请先运行 install.packages('DT2')。")
+}
+
+if (!requireNamespace("readr", quietly = TRUE)) {
+  stop("缺少 R 包 readr。请先运行 install.packages('readr')。")
+}
+
+data_file <- normalizePath(params$data_file, mustWork = TRUE)
+extension <- tolower(tools::file_ext(data_file))
+
+read_table_file <- function(path, extension) {
+  if (extension == "csv") {
+    return(readr::read_csv(path, show_col_types = FALSE, progress = FALSE))
+  }
+
+  if (extension == "parquet") {
+    if (requireNamespace("arrow", quietly = TRUE)) {
+      return(arrow::read_parquet(path))
+    }
+
+    duckdb_cli <- Sys.which("duckdb")
+    if (!nzchar(duckdb_cli)) {
+      stop(
+        "读取 Parquet 需要 R 包 arrow 或 DuckDB CLI。",
+        "请安装其中之一，或者先把文件导出为 CSV。"
+      )
+    }
+
+    escaped_path <- gsub("'", "''", normalizePath(path), fixed = TRUE)
+    temporary_csv <- tempfile(fileext = ".csv")
+    escaped_output <- gsub("'", "''", temporary_csv, fixed = TRUE)
+    copy_sql <- sprintf(
+      "COPY (SELECT * FROM read_parquet('%s')) TO '%s' (HEADER, DELIMITER ',');",
+      escaped_path,
+      escaped_output
+    )
+
+    command_output <- system2(
+      duckdb_cli,
+      args = c("-c", shQuote(copy_sql)),
+      stdout = TRUE,
+      stderr = TRUE
+    )
+    command_status <- attr(command_output, "status")
+
+    if (!is.null(command_status) && command_status != 0) {
+      stop("DuckDB 转换 Parquet 失败：", paste(command_output, collapse = "\n"))
+    }
+
+    return(readr::read_csv(temporary_csv, show_col_types = FALSE, progress = FALSE))
+  }
+
+  stop("仅支持 .csv 或 .parquet 文件，当前文件是：", basename(path))
+}
+
+data <- read_table_file(data_file, extension)
+
+if (nrow(data) == 0) stop("输入文件没有数据行。")
+if (ncol(data) == 0) stop("输入文件没有可展示的列。")
+
+names(data) <- trimws(names(data))
+
+if (any(is.na(names(data)) | !nzchar(names(data)))) {
+  stop("输入文件存在空白列名。请先为每一列设置唯一列名。")
+}
+
+if (anyDuplicated(names(data)) > 0) {
+  duplicate_names <- unique(names(data)[duplicated(names(data))])
+  stop("输入文件存在重复列名：", paste(duplicate_names, collapse = "、"))
+}
+
+source_row_count <- nrow(data)
+max_rows <- suppressWarnings(as.integer(params$max_rows))
+if (is.na(max_rows) || max_rows < 0) max_rows <- 0L
+
+if (max_rows > 0 && nrow(data) > max_rows) {
+  data <- data[seq_len(max_rows), , drop = FALSE]
+}
+
+# Convert nested Parquet list columns to readable text.
+for (column_name in names(data)) {
+  value <- data[[column_name]]
+  if (is.list(value) && !inherits(value, c("Date", "POSIXct", "POSIXlt"))) {
+    data[[column_name]] <- vapply(
+      value,
+      function(item) {
+        if (length(item) == 0 || is.null(item) || all(is.na(item))) return(NA_character_)
+        paste(as.character(item), collapse = " | ")
+      },
+      character(1)
+    )
+  }
+}
+
+for (column_name in names(data)) {
+  if (is.logical(data[[column_name]])) {
+    data[[column_name]] <- ifelse(
+      is.na(data[[column_name]]),
+      NA_character_,
+      ifelse(data[[column_name]], "是", "否")
+    )
+  }
+}
+
+source_name <- basename(data_file)
+rows_are_truncated <- nrow(data) < source_row_count
+```
+
+数据源：`r source_name`。共 `r format(nrow(data), big.mark = ",", scientific = FALSE)` 行、`r ncol(data)` 列。
+
+```{r}
+#| label: truncation-warning
+#| results: asis
+
+if (rows_are_truncated) {
+  cat(
+    "> 当前仅载入前 ",
+    format(nrow(data), big.mark = ","),
+    " 行，源文件共 ",
+    format(source_row_count, big.mark = ","),
+    " 行。需要全部数据时，将 `max_rows` 设为 0。\n",
+    sep = ""
+  )
+}
+```
+
+```{r}
+#| label: interactive-table
+
+numeric_columns <- names(data)[vapply(data, is.numeric, logical(1))]
+table_options <- list(
+  columns = names(data),
+  pageLength = 25,
+  autoWidth = FALSE,
+  paging = TRUE,
+  searching = TRUE,
+  ordering = TRUE,
+  order = list(),
+  columnControl = list(
+    target = 1,
+    content = list("search")
+  ),
+  layout = list(
+    topStart = "pageLength",
+    topEnd = list(
+      buttons = list(
+        list(
+          extend = "csv",
+          text = "导出 CSV",
+          filename = "交互式数据表_筛选结果",
+          bom = TRUE,
+          exportOptions = list(
+            rows = list(search = "applied"),
+            columns = ":visible"
+          )
+        ),
+        list(
+          extend = "excel",
+          text = "导出 Excel",
+          filename = "交互式数据表_筛选结果",
+          exportOptions = list(
+            rows = list(search = "applied"),
+            columns = ":visible"
+          )
+        ),
+        list(
+          extend = "colvis",
+          text = "选择列",
+          collectionLayout = "fixed",
+          prefixButtons = list("selectAllColumns", "unselectAllColumns"),
+          postfixButtons = list("colvisRestore")
+        )
+      ),
+      search = list(placeholder = "搜索全表")
+    ),
+    bottomStart = "info",
+    bottomEnd = "paging"
+  )
+)
+
+table_options <- DT2::dt2_length_menu(
+  table_options,
+  values = c(25, 50, 100),
+  labels = c("25", "50", "100")
+)
+
+table_options <- DT2::dt2_language(
+  table_options,
+  lang_list = list(
+    search = "搜索：",
+    searchPlaceholder = "搜索全表",
+    lengthMenu = "每页 _MENU_ 行",
+    info = "第 _START_–_END_ 行，共 _TOTAL_ 行",
+    infoEmpty = "没有数据",
+    infoFiltered = "（从 _MAX_ 行中筛选）",
+    zeroRecords = "没有匹配记录",
+    paginate = list(
+      first = "首页",
+      previous = "上一页",
+      `next` = "下一页",
+      last = "末页"
+    ),
+    columnControl = list(
+      search = "筛选本列",
+      searchClear = "清除筛选"
+    ),
+    buttons = list(
+      colvis = "选择列",
+      colvisRestore = "恢复全部列"
+    )
+  )
+)
+
+if (length(numeric_columns) > 0) {
+  numeric_digits <- vapply(
+    data[numeric_columns],
+    function(value) {
+      non_missing <- value[!is.na(value)]
+      if (length(non_missing) > 0 && all(abs(non_missing - round(non_missing)) < 1e-9)) 0L else 2L
+    },
+    integer(1)
+  )
+
+  for (decimal_places in unique(numeric_digits)) {
+    columns_with_digits <- numeric_columns[numeric_digits == decimal_places]
+    table_options <- DT2::dt2_format_number(
+      table_options,
+      col_specs = match(columns_with_digits, names(data)),
+      thousands = ",",
+      decimal = ".",
+      digits = decimal_places
+    )
+  }
+}
+
+DT2::dt2(
+  data,
+  theme = DT2::dt2_theme(
+    preset = "minimal",
+    striped = FALSE,
+    hover = TRUE,
+    compact = TRUE,
+    font_scale = 0.82
+  ),
+  responsive = FALSE,
+  width = "100%",
+  extensions = c("Buttons", "ColumnControl"),
+  options = table_options
+)
+```
+
+**操作说明**：拖动表头右边缘调整列宽，内容会随列宽自动换行；右上角“选择列”可逐列勾选，也可在列表顶部全部选择或全部取消；搜索框查询全表；在列名下方输入条件过滤单列；点击列名排序。“导出 CSV”和“导出 Excel”会导出当前筛选后的全部行及当前可见列。所有操作在浏览器内完成。
+
+**汇总说明**：表格底部汇总行按当前搜索和逐列筛选后的全部数据显示。金额及其他数值列显示“合计”，比率列显示非空值的“均值”；分页不会改变汇总范围。
+

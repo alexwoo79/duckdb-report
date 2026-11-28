@@ -64,6 +64,35 @@ func TestObsoleteStarterQMDIsNotSeeded(t *testing.T) {
 	}
 }
 
+func TestInteractiveTableTemplateIsEmbeddedAndSeeded(t *testing.T) {
+	t.Parallel()
+	for _, path := range []string{
+		"starters/templates/interactive_table.qmd",
+		"starters/templates/assets/table-layout.css",
+		"starters/templates/assets/table-resize.html",
+		"starters/templates/assets/table-resize.js",
+	} {
+		if _, err := fs.ReadFile(starterFS, path); err != nil {
+			t.Fatalf("interactive table starter %q is not embedded: %v", path, err)
+		}
+	}
+
+	store, err := New(t.TempDir(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		"interactive_table.qmd",
+		filepath.Join("assets", "table-layout.css"),
+		filepath.Join("assets", "table-resize.html"),
+		filepath.Join("assets", "table-resize.js"),
+	} {
+		if _, err := os.Stat(filepath.Join(store.Templates, path)); err != nil {
+			t.Fatalf("interactive table starter %q was not seeded: %v", path, err)
+		}
+	}
+}
+
 func TestOpenDoesNotSeedStarterAssets(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -314,7 +343,9 @@ func TestOpenRemovesUnusedLegacySeedFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(templates) != 1 || templates[0].Path != "templates/contract.qmd" {
+	if len(templates) != 2 ||
+		templates[0].Path != "templates/contract.qmd" ||
+		templates[1].Path != "templates/interactive_table.qmd" {
 		t.Fatalf("templates = %#v", templates)
 	}
 }
