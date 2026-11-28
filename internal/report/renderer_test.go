@@ -198,6 +198,72 @@ func TestEnvironmentTreatsQuartoAsPDFCapable(t *testing.T) {
 	}
 }
 
+func TestTemplateSupportsPDF(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		content string
+		want    bool
+	}{
+		{
+			name:    "html only",
+			content: "---\nformat: html\n---\n",
+		},
+		{
+			name:    "nested html only",
+			content: "---\nformat:\n  html:\n    toc: true\n---\n",
+		},
+		{
+			name:    "direct pdf",
+			content: "---\nformat: pdf\n---\n",
+			want:    true,
+		},
+		{
+			name:    "typst format",
+			content: "---\nformat:\n  typst: default\n---\n",
+			want:    true,
+		},
+		{
+			name:    "list includes pdf",
+			content: "---\nformat: [html, pdf]\n---\n",
+			want:    true,
+		},
+		{
+			name:    "nested formats include pdf",
+			content: "---\nformat:\n  html: default\n  pdf: default\n---\n",
+			want:    true,
+		},
+		{
+			name:    "no front matter",
+			content: "# Report\n",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := TemplateSupportsPDF(test.content); got != test.want {
+				t.Errorf("TemplateSupportsPDF() = %t, want %t", got, test.want)
+			}
+		})
+	}
+}
+
+func TestRenderRejectsPDFForHTMLOnlyTemplateBeforeExecution(t *testing.T) {
+	t.Parallel()
+	renderer := NewRenderer("/definitely/missing/quarto", nil, nil)
+	_, err := renderer.Render(context.Background(), model.RenderRequest{
+		Content: "---\nformat: html\n---\n\n```{r}\nplot(1)\n```\n",
+		Format:  "pdf",
+	})
+	if err == nil {
+		t.Fatal("Render() succeeded for an HTML-only template requested as PDF")
+	}
+	if !strings.Contains(err.Error(), "不是 PDF 模板") {
+		t.Fatalf("Render() error = %q, want unsupported PDF message", err)
+	}
+}
+
 func TestApplyDeclaredParams(t *testing.T) {
 	t.Parallel()
 	content := "---\ntitle: \"Report\"\nparams:\n  database: \"old.duckdb\"\n  title: \"Old\"\nformat: html\n---\n"

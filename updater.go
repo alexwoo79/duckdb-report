@@ -21,7 +21,14 @@ const (
 	updateRepository      = "alexwoo79/duckdb-report"
 	updateCheckTimeout    = 20 * time.Second
 	updateDownloadTimeout = 15 * time.Minute
+	updateProgressEvent   = "update:progress"
 )
+
+type updateProgressPayload struct {
+	Phase      string `json:"phase"`
+	Downloaded int64  `json:"downloaded"`
+	Total      int64  `json:"total"`
+}
 
 type updateState struct {
 	mu             sync.Mutex
@@ -70,7 +77,14 @@ func (a *App) DownloadUpdate() (model.UpdateDownload, error) {
 	}
 	ctx, cancel := context.WithTimeout(a.operationContext(), updateDownloadTimeout)
 	defer cancel()
-	download, err := a.updater.Download(ctx, release, downloadDir)
+	download, err := a.updater.DownloadWithProgress(
+		ctx,
+		release,
+		downloadDir,
+		func(progress update.Progress) {
+			a.emitUpdateProgress(progress)
+		},
+	)
 	if err != nil {
 		return model.UpdateDownload{}, err
 	}
@@ -78,6 +92,17 @@ func (a *App) DownloadUpdate() (model.UpdateDownload, error) {
 	a.updates.downloadedPath = download.Path
 	a.updates.mu.Unlock()
 	return download, nil
+}
+
+func (a *App) emitUpdateProgress(progress update.Progress) {
+	if a.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(a.ctx, updateProgressEvent, updateProgressPayload{
+		Phase:      progress.Phase,
+		Downloaded: progress.Downloaded,
+		Total:      progress.Total,
+	})
 }
 
 func (a *App) OpenUpdateRelease() error {

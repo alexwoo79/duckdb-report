@@ -35,6 +35,7 @@ import type {
   TableWriteResult,
   UpdateDownload,
   UpdateInfo,
+  UpdateProgress,
   ViewName,
   Workflow,
   WorkflowStep,
@@ -74,6 +75,7 @@ const updateDownloadBusy = ref(false);
 const updateInfo = ref<UpdateInfo | null>(null);
 const updateError = ref("");
 const updateDownloaded = ref<UpdateDownload | null>(null);
+const updateProgress = ref<UpdateProgress | null>(null);
 const settingsDraft = ref<AppSettings>({
   displayName: "",
   workspace: "",
@@ -124,6 +126,7 @@ const qmdEditorRef = ref<{ getValue(): string } | null>(null);
 const sqlCompletionTables = ref<SQLCompletionTable[]>([]);
 let stopSplitResize: (() => void) | undefined;
 let stopSidebarResize: (() => void) | undefined;
+let stopUpdateProgressEvents: (() => void) | undefined;
 const sqlDisplayName = computed(
   () => selectedSQL.value || "临时查询（未保存）",
 );
@@ -513,6 +516,7 @@ const activeDocumentLabel = computed(() => {
 const qmdUsesR = computed(() => /```\s*\{\s*r\b/i.test(reportContent.value));
 const qmdUsesPython = computed(() => /```\s*\{\s*python\b/i.test(reportContent.value));
 const qmdNeedsJupyter = computed(() => qmdUsesPython.value);
+const qmdSupportsPDF = computed(() => templateSupportsPDF(reportContent.value));
 const qmdDependencyError = computed(() => {
   if (qmdUsesR.value && !state.value?.environment.rPath) {
     return "当前 QMD 含 R 代码块，但未检测到 Rscript。请安装 R 运行时。";
@@ -521,6 +525,29 @@ const qmdDependencyError = computed(() => {
     return "当前 QMD 含 Python 代码块，但未检测到 Jupyter。请完成 Quarto/Jupyter 配置。";
   }
   return "";
+});
+const updateProgressPercent = computed<number | null>(() => {
+  const progress = updateProgress.value;
+  if (!progress) return null;
+  if (progress.phase === "verifying" || progress.phase === "complete") {
+    return 100;
+  }
+  if (progress.total <= 0) return null;
+  return Math.min(100, Math.round((progress.downloaded / progress.total) * 100));
+});
+const updateProgressLabel = computed(() => {
+  switch (updateProgress.value?.phase) {
+    case "preparing":
+      return "正在准备下载…";
+    case "downloading":
+      return "正在下载更新包…";
+    case "verifying":
+      return "正在校验安装包…";
+    case "complete":
+      return "下载并校验完成";
+    default:
+      return "正在处理更新…";
+  }
 });
 
 function clone<T>(value: T): T {
@@ -1441,6 +1468,13 @@ async function renderReport(
   const content = contentOverride ?? currentReportContent();
   if (!content.trim() || reportBusy.value) return;
   reportContent.value = content;
+  if (format === "pdf" && !templateSupportsPDF(content)) {
+    notify(
+      "当前 QMD 仅配置了 HTML 输出，不是 PDF 模板，已取消 PDF 渲染。如需 PDF，请先在 YAML 中将 format 设置为 pdf 或 typst。",
+      "info",
+    );
+    return;
+  }
   if (qmdDependencyError.value) {
     notify(qmdDependencyError.value, "error");
     return;
@@ -1482,6 +1516,53 @@ async function renderReport(
 
 function renderReportFromEditor(format: "html" | "pdf", content: string) {
   void renderReport(format, content);
+}
+
+function templateSupportsPDF(content: string): boolean {
+  const lines = content.replace(/\r\n?/g, "\n").replace(/^\uFEFF/, "").split("\n");
+  if (lines.length < 3 || lines[0]?.trim() !== "---") return false;
+
+  const frontMatterEnd = lines.findIndex(
+    (line, index) => index > 0 && line.trim() === "---",
+  );
+  if (frontMatterEnd < 0) return false;
+
+  let formatIndent = -1;
+  let formatChildIndent = -1;
+  for (let index = 1; index < frontMatterEnd; index += 1) {
+    const line = lines[index] ?? "";
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    const indent = line.length - line.trimStart().length;
+    if (formatIndent < 0) {
+      const separator = trimmed.indexOf(":");
+      if (separator < 0 || trimmed.slice(0, separator).trim() !== "format") {
+        continue;
+      }
+      if (outputFormatsContainPDF(trimmed.slice(separator + 1))) return true;
+      formatIndent = indent;
+      continue;
+    }
+
+    if (indent <= formatIndent) break;
+    if (formatChildIndent < 0) formatChildIndent = indent;
+    if (
+      indent === formatChildIndent &&
+      outputFormatsContainPDF(trimmed)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function outputFormatsContainPDF(value: string): boolean {
+  return value
+    .replace(/[\[\]{},'"]/g, " ")
+    .split(/\s+/)
+    .map((field) => field.toLowerCase().replace(/^[-:]+|[-:]+$/g, ""))
+    .some((field) => field === "pdf" || field === "typst");
 }
 
 async function saveTemplate(contentOverride?: string) {
@@ -1575,7 +1656,8 @@ function releaseVersion(value: string | undefined): string {
 }
 
 function formatBytes(value: number): string {
-  if (!value) return "大小未知";
+  if (!Number.isFinite(value) || value < 0) return "大小未知";
+  if (value === 0) return "0 B";
   if (value >= 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`;
   if (value >= 1024) return `${Math.round(value / 1024)} KB`;
   return `${value} B`;
@@ -1592,8 +1674,46 @@ function formatReleaseDate(value: string): string {
   }).format(date);
 }
 
+function friendlyUpdateError(
+  error: unknown,
+  action: "check" | "download",
+): string {
+  const message = errorMessage(error).toLowerCase();
+  if (message.includes("checksum")) {
+    return "更新包校验失败，请重新下载。";
+  }
+  if (
+    message.includes("has no package") ||
+    message.includes("checksums are not available")
+  ) {
+    return "当前版本暂无可用的安装包，请前往 Release 页面手动下载。";
+  }
+  if (
+    message.includes("timeout") ||
+    message.includes("deadline exceeded") ||
+    message.includes("timed out")
+  ) {
+    return "更新服务器响应超时，请检查网络后重试。";
+  }
+  if (
+    message.includes("no such host") ||
+    message.includes("connection") ||
+    message.includes("network is unreachable") ||
+    message.includes("networkerror") ||
+    message.includes("tls") ||
+    message.includes("proxy") ||
+    message.includes("github") ||
+    message.includes("http 5")
+  ) {
+    return "无法连接更新服务器，请检查网络或代理设置后重试。";
+  }
+  return action === "check"
+    ? "检查更新失败，请稍后重试。"
+    : "下载更新失败，请稍后重试。";
+}
+
 async function checkForUpdates(showFeedback = true) {
-  if (updateBusy.value) return;
+  if (updateBusy.value || updateDownloadBusy.value) return;
   updateBusy.value = true;
   updateError.value = "";
   try {
@@ -1602,6 +1722,7 @@ async function checkForUpdates(showFeedback = true) {
     updateInfo.value = info;
     if (previousLatest !== info.latestVersion) {
       updateDownloaded.value = null;
+      updateProgress.value = null;
     }
     if (info.available) {
       pushLog("info", `发现新版本 ${releaseVersion(info.latestVersion)}。`);
@@ -1612,9 +1733,9 @@ async function checkForUpdates(showFeedback = true) {
       notify("当前已是最新正式版本", "success");
     }
   } catch (error) {
-    updateError.value = errorMessage(error);
+    updateError.value = friendlyUpdateError(error, "check");
     if (showFeedback) {
-      notify(`检查更新失败：${updateError.value}`, "error");
+      notify(updateError.value, "error");
     }
   } finally {
     updateBusy.value = false;
@@ -1622,16 +1743,34 @@ async function checkForUpdates(showFeedback = true) {
 }
 
 async function downloadUpdate() {
-  if (updateDownloadBusy.value || !updateInfo.value?.available) return;
+  if (
+    updateBusy.value ||
+    updateDownloadBusy.value ||
+    !updateInfo.value?.available
+  ) {
+    return;
+  }
   updateDownloadBusy.value = true;
   updateError.value = "";
+  updateDownloaded.value = null;
+  updateProgress.value = {
+    phase: "preparing",
+    downloaded: 0,
+    total: updateInfo.value.assetSize || 0,
+  };
   try {
     const download = await backend().DownloadUpdate();
     updateDownloaded.value = download;
+    updateProgress.value = {
+      phase: "complete",
+      downloaded: download.size,
+      total: download.size,
+    };
     notify("更新包已下载并通过 SHA-256 校验", "success");
   } catch (error) {
-    updateError.value = errorMessage(error);
-    notify(`下载更新失败：${updateError.value}`, "error");
+    updateError.value = friendlyUpdateError(error, "download");
+    updateProgress.value = null;
+    notify(updateError.value, "error");
   } finally {
     updateDownloadBusy.value = false;
   }
@@ -1640,16 +1779,16 @@ async function downloadUpdate() {
 async function openUpdateRelease() {
   try {
     await backend().OpenUpdateRelease();
-  } catch (error) {
-    notify(errorMessage(error), "error");
+  } catch {
+    notify("无法打开 Release 页面，请稍后重试。", "error");
   }
 }
 
 async function openDownloadedUpdate() {
   try {
     await backend().OpenDownloadedUpdate();
-  } catch (error) {
-    notify(errorMessage(error), "error");
+  } catch {
+    notify("无法打开已下载的更新包，请检查文件是否仍然存在。", "error");
   }
 }
 
@@ -1727,6 +1866,12 @@ onMounted(async () => {
   const preferredDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
   setTheme(savedTheme === "light" || savedTheme === "dark" ? savedTheme : preferredDark ? "dark" : "light");
   window.addEventListener("resize", handleWindowResize);
+  stopUpdateProgressEvents = window.runtime?.EventsOn<UpdateProgress>(
+    "update:progress",
+    (progress) => {
+      if (progress && progress.phase) updateProgress.value = progress;
+    },
+  );
   const loaded = await loadInitial();
   if (loaded) {
     void checkForUpdates(false);
@@ -1740,6 +1885,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   stopSplitResize?.();
   stopSidebarResize?.();
+  stopUpdateProgressEvents?.();
   if (updatePollTimer) window.clearInterval(updatePollTimer);
   if (toastTimer) window.clearTimeout(toastTimer);
   window.removeEventListener("resize", handleWindowResize);
@@ -2399,7 +2545,7 @@ onBeforeUnmount(() => {
               <button class="ghost-button" @click="saveQMDAs()">
                 <AppIcon name="file" :size="15" /> 另存为
               </button>
-              <button class="secondary-button" :disabled="reportBusy || !!qmdDependencyError" :title="qmdDependencyError" @click="renderReport('pdf')">
+              <button class="secondary-button" :disabled="reportBusy || !!qmdDependencyError" :title="qmdSupportsPDF ? qmdDependencyError : '当前 QMD 不是 PDF 模板；点击可查看说明'" @click="renderReport('pdf')">
                 PDF
               </button>
               <button class="primary-button" :disabled="reportBusy || !!qmdDependencyError" :title="qmdDependencyError" @click="renderReport('html')">
@@ -2586,10 +2732,13 @@ onBeforeUnmount(() => {
                       available: updateInfo?.available,
                       current: updateInfo && !updateInfo.available,
                       error: updateError,
+                      downloading: updateDownloadBusy,
                     }"
                   >
                     {{
-                      updateBusy
+                      updateDownloadBusy
+                        ? "下载中"
+                        : updateBusy
                         ? "检查中"
                         : updateError
                           ? "操作失败"
@@ -2619,7 +2768,7 @@ onBeforeUnmount(() => {
                   <div class="update-actions">
                     <button
                       class="ghost-button small"
-                      :disabled="updateBusy"
+                      :disabled="updateBusy || updateDownloadBusy"
                       @click="checkForUpdates()"
                     >
                       <AppIcon name="refresh" :size="14" />
@@ -2663,11 +2812,11 @@ onBeforeUnmount(() => {
                     <div class="update-actions">
                       <button
                         class="primary-button"
-                        :disabled="!updateInfo.assetName || updateDownloadBusy"
+                        :disabled="!updateInfo.assetName || updateDownloadBusy || updateBusy"
                         @click="downloadUpdate"
                       >
                         <AppIcon name="download" :size="15" />
-                        {{ updateDownloadBusy ? "下载并校验中…" : "下载更新包" }}
+                        {{ updateDownloadBusy ? updateProgressLabel : "下载更新包" }}
                       </button>
                       <button
                         v-if="updateDownloaded"
@@ -2677,6 +2826,41 @@ onBeforeUnmount(() => {
                         <AppIcon name="external" :size="15" />
                         打开更新包
                       </button>
+                    </div>
+                  </div>
+                  <div
+                    v-if="updateDownloadBusy"
+                    class="update-progress"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <div class="update-progress-head">
+                      <strong>{{ updateProgressLabel }}</strong>
+                      <span v-if="updateProgressPercent !== null">
+                        {{ updateProgressPercent }}%
+                      </span>
+                    </div>
+                    <div
+                      class="update-progress-track"
+                      role="progressbar"
+                      :aria-valuemin="0"
+                      :aria-valuemax="100"
+                      :aria-valuenow="updateProgressPercent ?? undefined"
+                      :aria-valuetext="updateProgressLabel"
+                    >
+                      <span
+                        :class="{ indeterminate: updateProgressPercent === null }"
+                        :style="updateProgressPercent === null ? undefined : { width: `${updateProgressPercent}%` }"
+                      ></span>
+                    </div>
+                    <div class="update-progress-meta">
+                      <span>
+                        {{ formatBytes(updateProgress?.downloaded ?? 0) }}
+                        <template v-if="(updateProgress?.total ?? 0) > 0">
+                          / {{ formatBytes(updateProgress?.total ?? 0) }}
+                        </template>
+                      </span>
+                      <span>{{ updateProgress?.phase === "verifying" ? "必要时仍需数秒" : "下载完成后自动校验" }}</span>
                     </div>
                   </div>
                   <p v-if="updateDownloaded" class="update-downloaded">

@@ -37,6 +37,19 @@ type Config struct {
 	UserAgent      string
 }
 
+const (
+	ProgressPreparing   = "preparing"
+	ProgressDownloading = "downloading"
+	ProgressVerifying   = "verifying"
+	ProgressComplete    = "complete"
+)
+
+type Progress struct {
+	Phase      string
+	Downloaded int64
+	Total      int64
+}
+
 type Checker struct {
 	repository     string
 	currentVersion string
@@ -135,11 +148,10 @@ func (c *Checker) Check(ctx context.Context) (*Release, error) {
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, 4096))
 		return nil, fmt.Errorf(
-			"request github release: %s: %s",
-			response.Status,
-			strings.TrimSpace(string(body)),
+			"request github release: HTTP %d %s",
+			response.StatusCode,
+			http.StatusText(response.StatusCode),
 		)
 	}
 
@@ -191,6 +203,15 @@ func (c *Checker) Download(
 	release *Release,
 	destinationDir string,
 ) (model.UpdateDownload, error) {
+	return c.DownloadWithProgress(ctx, release, destinationDir, nil)
+}
+
+func (c *Checker) DownloadWithProgress(
+	ctx context.Context,
+	release *Release,
+	destinationDir string,
+	progress func(Progress),
+) (model.UpdateDownload, error) {
 	if release == nil {
 		return model.UpdateDownload{}, errors.New("check for updates before downloading")
 	}
@@ -212,6 +233,10 @@ func (c *Checker) Download(
 	if err := os.MkdirAll(destinationDir, 0o755); err != nil {
 		return model.UpdateDownload{}, fmt.Errorf("create update download directory: %w", err)
 	}
+	reportProgress(progress, Progress{
+		Phase: ProgressPreparing,
+		Total: release.info.AssetSize,
+	})
 
 	assetName := filepath.Base(release.asset.Name)
 	if assetName != release.asset.Name {
@@ -229,10 +254,28 @@ func (c *Checker) Download(
 	)
 	defer os.Remove(temporary)
 
-	written, err := c.downloadFile(ctx, release.asset.BrowserDownloadURL, temporary, maxUpdateSize)
+	written, err := c.downloadFile(
+		ctx,
+		release.asset.BrowserDownloadURL,
+		temporary,
+		maxUpdateSize,
+		release.info.AssetSize,
+		func(downloaded, total int64) {
+			reportProgress(progress, Progress{
+				Phase:      ProgressDownloading,
+				Downloaded: downloaded,
+				Total:      total,
+			})
+		},
+	)
 	if err != nil {
 		return model.UpdateDownload{}, fmt.Errorf("download update package: %w", err)
 	}
+	reportProgress(progress, Progress{
+		Phase:      ProgressVerifying,
+		Downloaded: written,
+		Total:      written,
+	})
 	actualChecksum, err := fileSHA256(temporary)
 	if err != nil {
 		return model.UpdateDownload{}, err
@@ -249,11 +292,22 @@ func (c *Checker) Download(
 	if err := os.Rename(temporary, destination); err != nil {
 		return model.UpdateDownload{}, fmt.Errorf("store update package: %w", err)
 	}
+	reportProgress(progress, Progress{
+		Phase:      ProgressComplete,
+		Downloaded: written,
+		Total:      written,
+	})
 	return model.UpdateDownload{
 		Name: assetName,
 		Path: destination,
 		Size: written,
 	}, nil
+}
+
+func reportProgress(progress func(Progress), value Progress) {
+	if progress != nil {
+		progress(value)
+	}
 }
 
 func (c *Checker) readChecksum(
@@ -272,7 +326,11 @@ func (c *Checker) readChecksum(
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("download release checksums: %s", response.Status)
+		return "", fmt.Errorf(
+			"download release checksums: HTTP %d %s",
+			response.StatusCode,
+			http.StatusText(response.StatusCode),
+		)
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxChecksumSize+1))
 	if err != nil {
@@ -300,6 +358,8 @@ func (c *Checker) downloadFile(
 	url string,
 	destination string,
 	maxSize int64,
+	sizeHint int64,
+	progress func(downloaded, total int64),
 ) (int64, error) {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -312,14 +372,37 @@ func (c *Checker) downloadFile(
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("request update package: %s", response.Status)
+		return 0, fmt.Errorf(
+			"request update package: HTTP %d %s",
+			response.StatusCode,
+			http.StatusText(response.StatusCode),
+		)
+	}
+
+	total := response.ContentLength
+	if total <= 0 {
+		total = sizeHint
+	}
+	if total > maxSize {
+		return 0, errors.New("update package exceeds the size limit")
+	}
+	if progress != nil {
+		progress(0, total)
 	}
 
 	file, err := os.OpenFile(destination, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 	if err != nil {
 		return 0, fmt.Errorf("create downloaded update: %w", err)
 	}
-	written, copyErr := io.Copy(file, io.LimitReader(response.Body, maxSize+1))
+	reader := io.Reader(response.Body)
+	if progress != nil {
+		reader = &downloadProgressReader{
+			reader:     reader,
+			total:      total,
+			onProgress: progress,
+		}
+	}
+	written, copyErr := io.Copy(file, io.LimitReader(reader, maxSize+1))
 	closeErr := file.Close()
 	if copyErr != nil {
 		return 0, fmt.Errorf("write downloaded update: %w", copyErr)
@@ -330,7 +413,30 @@ func (c *Checker) downloadFile(
 	if written > maxSize {
 		return 0, errors.New("update package exceeds the size limit")
 	}
+	if progress != nil {
+		progress(written, total)
+	}
 	return written, nil
+}
+
+type downloadProgressReader struct {
+	reader     io.Reader
+	downloaded int64
+	total      int64
+	lastEmit   time.Time
+	onProgress func(downloaded, total int64)
+}
+
+func (r *downloadProgressReader) Read(buffer []byte) (int, error) {
+	count, err := r.reader.Read(buffer)
+	if count > 0 {
+		r.downloaded += int64(count)
+		if r.lastEmit.IsZero() || time.Since(r.lastEmit) >= 100*time.Millisecond || err == io.EOF {
+			r.onProgress(r.downloaded, r.total)
+			r.lastEmit = time.Now()
+		}
+	}
+	return count, err
 }
 
 func fileSHA256(path string) (string, error) {

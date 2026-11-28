@@ -87,6 +87,9 @@ func (r *Renderer) Render(ctx context.Context, request model.RenderRequest) (mod
 	if format != "html" && format != "pdf" {
 		return model.RenderResult{}, fmt.Errorf("unsupported output format %q", format)
 	}
+	if format == "pdf" && !TemplateSupportsPDF(request.Content) {
+		return model.RenderResult{}, errors.New("当前 QMD 模板仅配置了 HTML 输出，不是 PDF 模板。请先在 YAML 中将 format 设置为 pdf 或 typst，再生成 PDF。")
+	}
 	if r.quarto == "" {
 		return model.RenderResult{}, errors.New("quarto executable was not found")
 	}
@@ -215,6 +218,81 @@ func (r *Renderer) Render(ctx context.Context, request model.RenderRequest) (mod
 		Format:      format,
 		Log:         logLines,
 	}, nil
+}
+
+func TemplateSupportsPDF(content string) bool {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	if len(lines) < 3 {
+		return false
+	}
+	lines[0] = strings.TrimPrefix(lines[0], "\ufeff")
+	if strings.TrimSpace(lines[0]) != "---" {
+		return false
+	}
+
+	frontMatterEnd := -1
+	for index := 1; index < len(lines); index++ {
+		if strings.TrimSpace(lines[index]) == "---" {
+			frontMatterEnd = index
+			break
+		}
+	}
+	if frontMatterEnd < 0 {
+		return false
+	}
+
+	formatIndent := -1
+	formatChildIndent := -1
+	for index := 1; index < frontMatterEnd; index++ {
+		line := lines[index]
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+		if formatIndent < 0 {
+			key, value, ok := strings.Cut(trimmed, ":")
+			if !ok || strings.TrimSpace(key) != "format" {
+				continue
+			}
+			if outputFormatsContainPDF(value) {
+				return true
+			}
+			formatIndent = indent
+			continue
+		}
+
+		if indent <= formatIndent {
+			break
+		}
+		if formatChildIndent < 0 {
+			formatChildIndent = indent
+		}
+		if indent == formatChildIndent && outputFormatsContainPDF(trimmed) {
+			return true
+		}
+	}
+	return false
+}
+
+func outputFormatsContainPDF(value string) bool {
+	normalized := strings.NewReplacer(
+		"[", " ",
+		"]", " ",
+		"{", " ",
+		"}", " ",
+		",", " ",
+		`"`, " ",
+		"'", " ",
+	).Replace(value)
+	for _, field := range strings.Fields(normalized) {
+		switch strings.ToLower(strings.Trim(field, "-:")) {
+		case "pdf", "typst":
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Renderer) injectReportTables(

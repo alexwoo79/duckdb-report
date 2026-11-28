@@ -1,16 +1,120 @@
 package update
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/alexwoo79/duckdb-report/internal/model"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return fn(request)
+}
+
+func TestDownloadProgressReaderReportsProgress(t *testing.T) {
+	t.Parallel()
+	var downloaded int64
+	var total int64
+	reader := &downloadProgressReader{
+		reader: strings.NewReader("update package"),
+		total:  100,
+		onProgress: func(current, expected int64) {
+			downloaded = current
+			total = expected
+		},
+	}
+
+	if _, err := io.Copy(io.Discard, reader); err != nil {
+		t.Fatal(err)
+	}
+	if downloaded != int64(len("update package")) {
+		t.Fatalf("downloaded = %d", downloaded)
+	}
+	if total != 100 {
+		t.Fatalf("total = %d", total)
+	}
+}
+
+func TestDownloadWithProgressReportsAllPhases(t *testing.T) {
+	t.Parallel()
+	packageData := []byte("verified update package")
+	sum := sha256.Sum256(packageData)
+	checksum := fmt.Sprintf("%s  duckdb-report.zip\n", hex.EncodeToString(sum[:]))
+	client := &http.Client{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			var body []byte
+			switch request.URL.Host {
+			case "checksums.example":
+				body = []byte(checksum)
+			case "download.example":
+				body = packageData
+			default:
+				return nil, fmt.Errorf("unexpected URL %s", request.URL)
+			}
+			return &http.Response{
+				StatusCode:    http.StatusOK,
+				Status:        "200 OK",
+				Header:        make(http.Header),
+				Body:          io.NopCloser(bytes.NewReader(body)),
+				ContentLength: int64(len(body)),
+				Request:       request,
+			}, nil
+		}),
+	}
+	checker := NewChecker(Config{Client: client})
+	release := &Release{
+		info: model.UpdateInfo{
+			LatestVersion: "2.0.8",
+			AssetName:     "duckdb-report.zip",
+			AssetSize:     int64(len(packageData)),
+		},
+		asset: &githubAsset{
+			Name:               "duckdb-report.zip",
+			BrowserDownloadURL: "https://download.example/duckdb-report.zip",
+		},
+		checksums: &githubAsset{
+			Name:               checksumAssetName,
+			BrowserDownloadURL: "https://checksums.example/checksums.txt",
+		},
+	}
+
+	var phases []string
+	download, err := checker.DownloadWithProgress(
+		t.Context(),
+		release,
+		t.TempDir(),
+		func(progress Progress) {
+			phases = append(phases, progress.Phase)
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if download.Size != int64(len(packageData)) {
+		t.Fatalf("download size = %d", download.Size)
+	}
+	if len(phases) < 4 ||
+		phases[0] != ProgressPreparing ||
+		phases[len(phases)-2] != ProgressVerifying ||
+		phases[len(phases)-1] != ProgressComplete {
+		t.Fatalf("progress phases = %#v", phases)
+	}
+	if !slices.Contains(phases, ProgressDownloading) {
+		t.Fatalf("progress phases = %#v, missing %q", phases, ProgressDownloading)
+	}
+}
 
 func TestCheckerCheck(t *testing.T) {
 	tests := []struct {
@@ -132,7 +236,7 @@ func TestCheckerCheckRejectsInvalidRelease(t *testing.T) {
 		{
 			name:    "non-success status",
 			status:  http.StatusBadGateway,
-			message: "request github release: 502",
+			message: "request github release: HTTP 502",
 		},
 		{
 			name:    "invalid version",
@@ -167,6 +271,38 @@ func TestCheckerCheckRejectsInvalidRelease(t *testing.T) {
 				t.Fatalf("error = %q, want substring %q", got, test.message)
 			}
 		})
+	}
+}
+
+func TestCheckerCheckDoesNotExposeHTTPResponseBody(t *testing.T) {
+	t.Parallel()
+	const serverDetail = "upstream detail that should not reach the UI"
+	client := &http.Client{
+		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusBadGateway,
+				Status:     "502 Bad Gateway",
+				Header:     make(http.Header),
+				Body: io.NopCloser(
+					strings.NewReader(strings.Repeat(serverDetail, 100)),
+				),
+				Request: request,
+			}, nil
+		}),
+	}
+	checker := NewChecker(Config{
+		Repository:     "acme/app",
+		CurrentVersion: "2.0.7",
+		APIBaseURL:     "https://api.example",
+		Client:         client,
+	})
+
+	_, err := checker.Check(t.Context())
+	if err == nil {
+		t.Fatal("expected release check to fail")
+	}
+	if strings.Contains(err.Error(), serverDetail) || len(err.Error()) > 120 {
+		t.Fatalf("error exposes response body: %q", err)
 	}
 }
 
@@ -239,7 +375,17 @@ func TestCheckerDownload(t *testing.T) {
 				t.Fatal(err)
 			}
 			destination := t.TempDir()
-			download, err := checker.Download(t.Context(), release, destination)
+			var phases []string
+			var lastProgress Progress
+			download, err := checker.DownloadWithProgress(
+				t.Context(),
+				release,
+				destination,
+				func(progress Progress) {
+					phases = append(phases, progress.Phase)
+					lastProgress = progress
+				},
+			)
 			if test.wantFailure {
 				if err == nil {
 					t.Fatal("expected checksum verification to fail")
@@ -256,6 +402,16 @@ func TestCheckerDownload(t *testing.T) {
 			}
 			if download.Size != int64(len(packageData)) {
 				t.Fatalf("download size = %d", download.Size)
+			}
+			if len(phases) < 4 ||
+				phases[0] != ProgressPreparing ||
+				phases[len(phases)-2] != ProgressVerifying ||
+				phases[len(phases)-1] != ProgressComplete ||
+				!slices.Contains(phases, ProgressDownloading) {
+				t.Fatalf("progress phases = %#v", phases)
+			}
+			if lastProgress.Downloaded != int64(len(packageData)) {
+				t.Fatalf("progress downloaded = %d", lastProgress.Downloaded)
 			}
 			stored, err := os.ReadFile(download.Path)
 			if err != nil {

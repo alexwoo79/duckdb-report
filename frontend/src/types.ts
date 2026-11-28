@@ -117,6 +117,18 @@ export interface UpdateDownload {
   size: number;
 }
 
+export type UpdateProgressPhase =
+  | "preparing"
+  | "downloading"
+  | "verifying"
+  | "complete";
+
+export interface UpdateProgress {
+  phase: UpdateProgressPhase;
+  downloaded: number;
+  total: number;
+}
+
 export interface RunInfo {
   id: string;
   name: string;
@@ -365,7 +377,10 @@ declare global {
       };
     };
     runtime?: {
-      EventsOn(event: string, callback: (payload: StepEvent) => void): () => void;
+      EventsOn<T = unknown>(
+        event: string,
+        callback: (payload: T) => void,
+      ): () => void;
     };
   }
 }
