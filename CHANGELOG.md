@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.1.1 - 2026-11-28
+
+### Changed
+
+- Show live download and verification progress for application updates, with clearer failure messages and guards against concurrent update actions.
+
+### Fixed
+
+- Reject PDF rendering for HTML-only QMD templates before Quarto starts, so the editor explains how to enable PDF or Typst output.
+
 ## v2.1.0 - 2026-11-26
 
 ### Added
